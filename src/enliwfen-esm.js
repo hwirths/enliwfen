@@ -57,7 +57,7 @@ class Enliwfen {
             return this._method
         }
         
-        merge(result) {
+        get mergeTarget() {
             const element = this._element;
             let target = element;
             
@@ -65,27 +65,58 @@ class Enliwfen {
                 target = document.querySelector(element.dataset.enliwfenTarget);
             }
             
-            morphdom(target, result);
-            Enliwfen.update(target);
+            return target;
+        }
+        
+        async mergeFromText(response) {
+            const target = this.mergeTarget;
+            
+            if (target !== null) {
+                morphdom(target, await response.text());
+                Enliwfen.update(target);
+            }
+        }
+        
+        mergeFromJson(data) {
+            const target = this.mergeTarget;
+            
+            if (target !== null) {
+                morphdom(target, data.result);
+                Enliwfen.update(target);
+            }
+            
+            if (data.updates instanceof Object) {
+                for (const [id, update] of Object.entries(data.updates)) {
+                    const target = document.getElementById(id);
+                    
+                    if (target !== null) {
+                        morphdom(target, update);
+                        Enliwfen.update(target);
+                    }
+                }
+            }
         }
 
         async succeeded(response) {
-            switch(response.headers.get("Content-Type")) {
+            const contentType = response.headers.get("Content-Type"),
+                  parameterIndex = contentType.indexOf(";"),
+                  mimeType = parameterIndex === -1 ? contentType : contentType.substring(0, parameterIndex);
+                  
+            switch(mimeType) {
                 case "application/json":
-                    const data = await response.json();
+                    const jsonResponse = await response.json();
                     
-                    if (data.assign_location) {
-                        location.assign(data.assign_location)
-                    } else if (data.replace_location) {
-                        location.replace(data.replace_location)
+                    if (jsonResponse.assign_location) {
+                        location.assign(jsonResponse.assign_location)
+                    } else if (jsonResponse.replace_location) {
+                        location.replace(jsonResponse.replace_location)
                     } else {
-                        this.merge(data.result);
+                        this.mergeFromJson(jsonResponse);
                     }
                     break;
                     
                 case "text/html":
-                    const result = await response.text();
-                    this.merge(result);
+                    this.mergeFromText(response)
                     break;
             }
         }
@@ -93,13 +124,29 @@ class Enliwfen {
         async failed(response) {
             switch(response.headers.get("Content-Type")) {
                 case "application/json":
-                    const data = await response.json();
-                    this.merge(data.result);
+                    const jsonResponse = await response.json();
+                    this.mergeFromJson(jsonResponse);
                     break;
                     
                 case "text/html":
-                    const result = await response.text();
-                    this.merge(result);
+                    this.mergeFromText(response);
+                    break;
+            }
+        }
+        
+        async fetched(response) {
+            switch(response.status) {
+                case 200:
+                case 201:
+                    await this.succeeded(response);
+                    break;
+                                
+                case 205:
+                    location.reload();
+                    break;
+                    
+                case 500:
+                    await this.failed(response);
                     break;
             }
         }
@@ -119,24 +166,9 @@ class Enliwfen {
                 requestOptions.body = new FormData(element)
             }
         
-            const response = await fetch(url, requestOptions);
-
-            switch(response.status) {
-                case 200:
-                case 201:
-                    this.succeeded(response);
-                    break;
-                                
-                case 205:
-                    location.reload();
-                    break;
-                    
-                case 500:
-                    this.failed(response);
-                    break;
-            }
+            await this.fetched(await fetch(url, requestOptions));
         }
-    } /* classs Element */
+    } /* class Element */
     
     static Action = class extends Enliwfen.EnliwfenedElement {
         constructor(element) {
@@ -246,10 +278,7 @@ class Enliwfen {
         }
         
         async load() {
-            const response = await fetch(this.element.action),
-                  result = await response.text();
-                  
-            this.merge(result);
+            await this.fetched(await fetch(this.element.action));
         }
         
         async submit() {
