@@ -68,30 +68,31 @@ class Enliwfen {
             return target;
         }
         
-        async mergeFromText(response) {
-            const target = this.mergeTarget;
-            
+        merge(contents, target = this.mergeTarget) {
             if (target !== null) {
-                morphdom(target, await response.text());
-                Enliwfen.update(target);
+                const result = morphdom(target, contents);
+                
+                if (result !== target) {
+                    Enliwfen.release(target)
+                } 
+                
+                Enliwfen.update(result);
             }
         }
         
+        async mergeFromText(response) {
+            this.merge(await response.text());
+        }
+        
         mergeFromJson(data) {
-            const target = this.mergeTarget;
-            
-            if (target !== null) {
-                morphdom(target, data.result);
-                Enliwfen.update(target);
-            }
+            this.merge(data.result);
             
             if (data.updates instanceof Object) {
                 for (const [id, update] of Object.entries(data.updates)) {
                     const target = document.getElementById(id);
                     
                     if (target !== null) {
-                        morphdom(target, update);
-                        Enliwfen.update(target);
+                        this.merge(update, target);
                     }
                 }
             }
@@ -323,6 +324,22 @@ class Enliwfen {
         }
     }
     
+    static releaseElement(element) {
+        switch (element.tagName) {
+            case "A":
+            case "BUTTON":
+                this.actions.delete(element);
+                break;
+                
+            case "FORM":
+                this.forms.delete(element);
+                break;
+                
+            default:
+                this.components.delete(element);
+        }
+    }
+    
     static newElement(element) {
         console.log(element);
         
@@ -341,7 +358,18 @@ class Enliwfen {
         }
     }
     
+    static release(target) {
+        if (target.classList.contains("enlifwen")) {
+            this.releaseElement(target);
+        }
+        
+        target.querySelectorAll(".enliwfen").forEach(element => this.releaseElement(element));
+    }
+    
     static update(target) {
+        if (target.classList.contains("enliwfen")) {
+            this.newElement(target);
+        }
         target.querySelectorAll(".enliwfen").forEach(element => this.newElement(element));        
     }
     
