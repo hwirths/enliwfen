@@ -57,7 +57,7 @@ class Enliwfen {
             return this._method
         }
         
-        get mergeTarget() {
+        get target() {
             const element = this._element;
             let target = element;
             
@@ -68,7 +68,7 @@ class Enliwfen {
             return target;
         }
         
-        merge(contents, target = this.mergeTarget) {
+        merge(contents, target = this.target) {
             if (target !== null) {
                 const result = morphdom(target, contents);
                 
@@ -195,6 +195,31 @@ class Enliwfen {
         }
     }
     
+    static ToggleAction = class extends Enliwfen.EnliwfenedElement {
+        constructor(element) {
+            super(element);
+        }
+        
+        trigger() {
+            const element = this.element,
+                  dataset = element.dataset,
+                  attribute = dataset.enliwfenToggle,
+                  target = this.target;
+            
+            target.toggleAttribute(attribute);            
+        }
+        
+        handleEvent(event) {
+            const dataset = this.element.dataset;
+            
+            if (dataset.enliwfenEvent && event.type == dataset.enliwfenEvent) {
+                this.trigger();
+            } else if (event.type == "click") {
+                this.trigger();
+            }
+        }
+    }
+    
     static get actions() {
         if (this._actions === undefined) {
             this._actions = new Map();
@@ -212,7 +237,17 @@ class Enliwfen {
             element.addEventListener("click", action);
             actions.set(element, action);
         }
+    }
+
+    static newToggleAction(element) {
+        const actions = this.actions;
         
+        if (actions.get(element) === undefined) {
+            const action = new Enliwfen.ToggleAction(element);
+            
+            element.addEventListener("click", action);
+            actions.set(element, action);
+        }
     }
     
     static Component = class extends Enliwfen.EnliwfenedElement {
@@ -354,7 +389,14 @@ class Enliwfen {
                 break;
                 
             default:
-                this.newComponent(element);
+                const dataset = element.dataset;
+                
+                if ("enliwfenUrl" in dataset) {
+                    this.newComponent(element);    
+                } else if ("enliwfenToggle" in dataset) {
+                    this.newToggleAction(element);
+                }
+                
         }
     }
     
@@ -370,7 +412,18 @@ class Enliwfen {
         if (target.classList.contains("enliwfen")) {
             this.newElement(target);
         }
-        target.querySelectorAll(".enliwfen").forEach(element => this.newElement(element));        
+        target.querySelectorAll(".enliwfen").forEach(element => this.newElement(element));
+        
+        /*
+         * Propably a bad approach to enable script elements
+         * nested in dnyamically loaded HTML fragments.
+         */
+        /* target.querySelectorAll("script").forEach(blockedScript => {
+            const newScript = document.createElement("script");
+            
+            newScript.text = blockedScript.innerText;
+            blockedScript.replaceWith(newScript);
+        }) */
     }
     
     static init() {
