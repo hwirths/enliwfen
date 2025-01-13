@@ -9,6 +9,8 @@ import morphdom from "morphdom"
 class Enliwfen {
     
     /* Base representation of an enlivened element
+     * 
+     * 
      */
     static EnliwfenedElement = class {
         constructor(element) {
@@ -296,12 +298,21 @@ class Enliwfen {
             const dataset = element.dataset,
                   component = new Enliwfen.Component(element);
             
+            /* Initially update the component, if the attribute
+               'enliwfenDeferred' were present. */
             if ("enliwfenDeferred" in dataset) {
                 component.update();
             }
             
             if (dataset.enliwfenInterval) {
                 setInterval(() => component.update(), dataset.enliwfenInterval);
+            } else if (dataset.enliwfenEvent) {
+                const eventsource = this.newEventSource(element);
+                
+                eventsource.addEventListener(dataset.enliwfenEvent, () => {
+                    console.debug(`Got event ${dataset.enliwfenEvent}. Component will be updated.`);
+                    component.update();
+                });
             }
             
             components.set(element, component);
@@ -359,6 +370,36 @@ class Enliwfen {
         }
     }
     
+    static get eventsources() {
+        if (this._eventsources === undefined) {
+            this._eventsources = new Map();
+        }
+        
+        return this._eventsources;
+    }
+    
+    static newEventSource(element) {
+        const dataset = element.dataset,
+              url = dataset.enliwfenEventsource;
+        
+        if (url !== undefined) {
+            const eventsources = this.eventsources;
+            let eventsource = eventsources.get(url);
+            
+            if (eventsource === undefined) {
+                eventsource = new EventSource(url);
+                
+                eventsources.set(url, eventsource);                
+                eventsource.addEventListener("error", (error) => {
+                    console.error(error);
+                    eventsources.delete(url);    
+                });
+            }
+            
+            return eventsource;
+        }          
+    }
+    
     static releaseElement(element) {
         switch (element.tagName) {
             case "A":
@@ -395,8 +436,9 @@ class Enliwfen {
                     this.newComponent(element);    
                 } else if ("enliwfenToggle" in dataset) {
                     this.newToggleAction(element);
+                } else if ("enliwfenEventsource" in dataset) {
+                    this.newEventSource(element);
                 }
-                
         }
     }
     
