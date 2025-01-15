@@ -221,6 +221,32 @@ class Enliwfen {
             }
         }
     }
+
+    static ToggleClassAction = class extends Enliwfen.EnliwfenedElement {
+        constructor(element) {
+            super(element);
+        }
+        
+        trigger() {
+            const element = this.element,
+                  dataset = element.dataset,
+                  className = dataset.enliwfenToggleClass,
+                  target = this.target;
+            
+            target.classList.toggle(className);            
+        }
+        
+        handleEvent(event) {
+            const dataset = this.element.dataset;
+            
+            if (dataset.enliwfenEvent && event.type == dataset.enliwfenEvent) {
+                this.trigger();
+            } else if (event.type == "click") {
+                this.trigger();
+            }
+        }
+    }
+    
     
     static get actions() {
         if (this._actions === undefined) {
@@ -246,6 +272,17 @@ class Enliwfen {
         
         if (actions.get(element) === undefined) {
             const action = new Enliwfen.ToggleAction(element);
+            
+            element.addEventListener("click", action);
+            actions.set(element, action);
+        }
+    }
+
+    static newToggleClassAction(element) {
+        const actions = this.actions;
+        
+        if (actions.get(element) === undefined) {
+            const action = new Enliwfen.ToggleClassAction(element);
             
             element.addEventListener("click", action);
             actions.set(element, action);
@@ -436,6 +473,8 @@ class Enliwfen {
                     this.newComponent(element);    
                 } else if ("enliwfenToggle" in dataset) {
                     this.newToggleAction(element);
+                } else if ("enliwfenToggleClass" in dataset) {
+                    this.newToggleClassAction(element);
                 } else if ("enliwfenEventsource" in dataset) {
                     this.newEventSource(element);
                 }
