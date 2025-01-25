@@ -70,6 +70,19 @@ class Enliwfen {
             return target;
         }
         
+        get targets() {
+            const element = this._element;
+            let targets = [element];
+            
+            if (element.dataset.enliwfenTargets) {
+                targets = document.querySelectorAll(element.dataset.enliwfenTargets);
+            } else {
+                targets = [this.target]
+            }
+            
+            return targets;
+        }
+
         merge(contents, target = this.target) {
             if (target !== null) {
                 const result = morphdom(target, contents);
@@ -206,9 +219,9 @@ class Enliwfen {
             const element = this.element,
                   dataset = element.dataset,
                   attribute = dataset.enliwfenToggle,
-                  target = this.target;
+                  targets = this.targets;
             
-            target.toggleAttribute(attribute);            
+            targets.forEach(target => target.toggleAttribute(attribute));            
         }
         
         handleEvent(event) {
@@ -231,9 +244,9 @@ class Enliwfen {
             const element = this.element,
                   dataset = element.dataset,
                   className = dataset.enliwfenToggleClass,
-                  target = this.target;
+                  targets = this.targets;
             
-            target.classList.toggle(className);            
+            targets.forEach(target => target.classList.toggle(className))
         }
         
         handleEvent(event) {
