@@ -5,61 +5,74 @@
  */
 import morphdom from "morphdom"
 
+const version = "0.1.0"
+const elementMap = new Map()
 
-class Enliwfen {
+class FeatureNode {
     
-    /* Base representation of an enlivened element
-     * 
-     * 
-     */
-    static EnliwfenedElement = class {
-        constructor(element) {
-            this._element = element;
-        }
-        
-        get element() {
-            return this._element;
-        }
-        
-        get url() {
-            if (this._url === undefined) {
-                const element = this._element;
-                
-                switch(element.tagName) {
-                    case "A":
-                        return element.href;
-                    
-                    case "BUTTON":
-                        return element.getAttribute("formaction") || element.dataset.enliwfenUrl
-                    
-                    case "FORM":
-                        return element.action
-                    
-                    default:
-                        return element.dataset.enliwfenUrl;
-                }
-            }
+    constructor(element) {
+        this._element = element;
+        this._dataset = element.dataset;
+    }
+    
+    get element() {
+        return this._element;
+    }
+    
+    get dataset() {
+        return this._dataset;
+    }
+    
+    get url() {
+        if (this._url === undefined) {
+            const element = this._element;
             
-            return this._url            
-        }
-        
-        get method() {
-            if (this._method === undefined) {
-                const element = this._element;
+            switch(element.tagName) {
+                case "A":
+                    return element.href;
                 
-                switch(element.tagName) {
-                    case "FORM":
-                        return element.method
-                    
-                    default:
-                        return element.dataset.enliwfenMethod || "GET"
-                }
+                case "BUTTON":
+                    return element.getAttribute("formaction") || element.dataset.enliwfenUrl
+                
+                case "FORM":
+                    return element.action
+                
+                default:
+                    return element.dataset.enliwfenUrl;
             }
-            
-            return this._method
         }
         
-        get target() {
+        return this._url            
+    }
+    
+    get method() {
+        if (this._method === undefined) {
+            const element = this._element;
+            
+            switch(element.tagName) {
+                case "FORM":
+                    return this.deferred ? "GET" : element.method
+                
+                default:
+                    return element.dataset.enliwfenMethod || "GET"
+            }
+        }
+        
+        return this._method
+    }
+    
+    get headers() {
+        if (this._headers === undefined) {
+            const headers = this.dataset.enliwfenHeaders;
+            
+            this._headers = headers ? JSON.parse(headers) : null;
+        }
+        
+        return this._headers
+    }
+    
+    get target() {
+        if (this._target === undefined) {
             const element = this._element;
             let target = element;
             
@@ -67,12 +80,16 @@ class Enliwfen {
                 target = document.querySelector(element.dataset.enliwfenTarget);
             }
             
-            return target;
+            this._target = target;            
         }
         
-        get targets() {
+        return this._target;
+    }
+    
+    get targets() {
+        if (this._targets === undefined) {
             const element = this._element;
-            let targets = [element];
+            let targets;
             
             if (element.dataset.enliwfenTargets) {
                 targets = document.querySelectorAll(element.dataset.enliwfenTargets);
@@ -80,453 +97,548 @@ class Enliwfen {
                 targets = [this.target]
             }
             
-            return targets;
+            this._targets = targets;
         }
-
-        merge(contents, target = this.target) {
-            if (target !== null) {
-                const result = morphdom(target, contents);
-                
-                if (result !== target) {
-                    Enliwfen.release(target)
-                } 
-                
-                Enliwfen.update(result);
+        
+        return this._targets;
+    }
+    
+    get event() {
+        if (this._event === undefined) {
+            const event = this.dataset.enliwfenEvent;
+            
+            if (event !== undefined) {
+                this._event = event;
+            } else if (this.element.tagName === "FORM") {
+                this._event = "submit";
+            } else if (this.element.tagName === "INPUT") {
+                this._event = "change";
+            } else {
+                this._event = "click";
             }
         }
         
-        async mergeFromText(response) {
-            this.merge(await response.text());
+        return this._event;
+    }
+    
+    get toggleAttribute() {
+        if (this._toggleAttribute === undefined) {
+            const toggle = this.dataset.enliwfenToggle;
+            
+            this._toggleAttribute = toggle ? toggle : null;
         }
         
-        mergeFromJson(data) {
-            this.merge(data.result);
+        
+        return this._toggleAttribute;
+    }
+    
+    get toggleClass() {
+        if (this._toggleClass === undefined) {
+            const toggleClass = this.dataset.enliwfenToggleClass;
             
-            if (data.updates instanceof Object) {
-                for (const [id, update] of Object.entries(data.updates)) {
-                    const target = document.getElementById(id);
-                    
-                    if (target !== null) {
-                        this.merge(update, target);
+            this._toggleClass = toggleClass ? toggleClass : null;
+        }
+        
+        return this._toggleClass;
+    }
+    
+    get interval() {
+        const interval = this.dataset.enliwfenInterval;
+        
+        return interval ? interval : null;
+    }
+    
+    get deferred() {
+        return "enliwfenDeferred" in this.dataset;
+    }
+    
+    get eventSource() {
+        const eventSource = this.dataset.enliwfenEventSource;
+        
+        return eventSource ? eventSource : null;
+    }
+    
+    get checkboxGroup() {
+        const checkboxGroup = this.dataset.enliwfenCheckboxGroup;
+        
+        return checkboxGroup ? checkboxGroup : null;
+    }
+    
+    dispatchEvent(eventType) {
+        this.element.dispatchEvent(new CustomEvent(eventType));
+    }
+}
+
+class DOMHelper {
+    
+    static merge(target, contents) {
+        if (target !== null) {
+            morphdom(target, contents, {
+                onNodeAdded: (node) => {
+                    if (node.classList && node.classList.contains("enliwfen")) {
+                        console.debug("Add node %o", node);
+                        FeatureFactory.createFeature(node);
                     }
-                }
-            }
-        }
-
-        async succeeded(response) {
-            const contentType = response.headers.get("Content-Type"),
-                  parameterIndex = contentType.indexOf(";"),
-                  mimeType = parameterIndex === -1 ? contentType : contentType.substring(0, parameterIndex);
-                  
-            switch(mimeType) {
-                case "application/json":
-                    const jsonResponse = await response.json();
-                    
-                    if (jsonResponse.assign_location) {
-                        location.assign(jsonResponse.assign_location)
-                    } else if (jsonResponse.replace_location) {
-                        location.replace(jsonResponse.replace_location)
-                    } else {
-                        this.mergeFromJson(jsonResponse);
+                },
+                onBeforeElUpdated: (fromElement, toElement) => {
+                    if (fromElement.classList.contains("enliwfen")) {
+                        /*
+                         * Remove a feature, if the new element either
+                         * has a different ID or different 'enliwfen' settings.
+                         */
+                        if (fromElement.id !== toElement.id) {
+                            console.debug("Update needed due to different id! %o : %o", fromElement, toElement);
+                            FeatureFactory.destroyFeature(fromElement);
+                        } else {
+                            for (const attribute of fromElement.attributes) {
+                                if (attribute.name.startsWith("data-enliwfen")
+                                    && attribute.value !== toElement.getAttribute(attribute.name)) {
+                                    console.debug("Update needed due to different enliwfen settings! %o : %o", fromElement, toElement);
+                                    FeatureFactory.destroyFeature(fromElement);
+                                    break;
+                                }
+                            }
+                        }
                     }
-                    break;
-                    
-                case "text/html":
-                    this.mergeFromText(response)
-                    break;
-            }
-        }
-        
-        async failed(response) {
-            switch(response.headers.get("Content-Type")) {
-                case "application/json":
-                    const jsonResponse = await response.json();
-                    this.mergeFromJson(jsonResponse);
-                    break;
-                    
-                case "text/html":
-                    this.mergeFromText(response);
-                    break;
-            }
-        }
-        
-        async fetched(response) {
-            switch(response.status) {
-                case 200:
-                case 201:
-                    await this.succeeded(response);
-                    break;
-                                
-                case 205:
-                    location.reload();
-                    break;
-                    
-                case 500:
-                    await this.failed(response);
-                    break;
-            }
-        }
-        
-        async fetch() {
-            const element = this._element,
-                  dataset = element.dataset,
-                  {url, method} = this,
-                  headers = dataset.enliwfenHeaders,
-                  requestOptions = {method: method};
-                  
-            if (headers) {
-                requestOptions.headers = JSON.parse(headers);
-            }
-            
-            if (element.tagName === "FORM") {
-                requestOptions.body = new FormData(element)
-            }
-        
-            await this.fetched(await fetch(url, requestOptions));
-        }
-    } /* class Element */
-    
-    static Action = class extends Enliwfen.EnliwfenedElement {
-        constructor(element) {
-            super(element);
-        }
-    
-        async trigger() {
-            const element = this.element;
-
-            element.dispatchEvent(new CustomEvent("enliwfen.action.before"))
-            await this.fetch();        
-            element.dispatchEvent(new CustomEvent("enliwfen.action.done"));
-        }   
-         
-        handleEvent(event) {
-            switch (event.type) {
-                case "click":
-                    event.preventDefault();
-                    event.stopPropagation();
-                    this.trigger();
-                    break;
-            }
-        }
-    }
-    
-    static ToggleAction = class extends Enliwfen.EnliwfenedElement {
-        constructor(element) {
-            super(element);
-        }
-        
-        trigger() {
-            const element = this.element,
-                  dataset = element.dataset,
-                  attribute = dataset.enliwfenToggle,
-                  targets = this.targets;
-            
-            targets.forEach(target => target.toggleAttribute(attribute));            
-        }
-        
-        handleEvent(event) {
-            const dataset = this.element.dataset;
-            
-            if (dataset.enliwfenEvent && event.type == dataset.enliwfenEvent) {
-                this.trigger();
-            } else if (event.type == "click") {
-                this.trigger();
-            }
-        }
-    }
-
-    static ToggleClassAction = class extends Enliwfen.EnliwfenedElement {
-        constructor(element) {
-            super(element);
-        }
-        
-        trigger() {
-            const element = this.element,
-                  dataset = element.dataset,
-                  className = dataset.enliwfenToggleClass,
-                  targets = this.targets;
-            
-            targets.forEach(target => target.classList.toggle(className))
-        }
-        
-        handleEvent(event) {
-            const dataset = this.element.dataset;
-            
-            if (dataset.enliwfenEvent && event.type == dataset.enliwfenEvent) {
-                this.trigger();
-            } else if (event.type == "click") {
-                this.trigger();
-            }
-        }
-    }
-    
-    
-    static get actions() {
-        if (this._actions === undefined) {
-            this._actions = new Map();
-        }
-        
-        return this._actions;
-    }
-    
-    static newAction(element) {
-        const actions = this.actions;
-        
-        if (actions.get(element) === undefined) {
-            const action = new Enliwfen.Action(element);
-
-            element.addEventListener("click", action);
-            actions.set(element, action);
-        }
-    }
-
-    static newToggleAction(element) {
-        const actions = this.actions;
-        
-        if (actions.get(element) === undefined) {
-            const action = new Enliwfen.ToggleAction(element);
-            
-            element.addEventListener("click", action);
-            actions.set(element, action);
-        }
-    }
-
-    static newToggleClassAction(element) {
-        const actions = this.actions;
-        
-        if (actions.get(element) === undefined) {
-            const action = new Enliwfen.ToggleClassAction(element);
-            
-            element.addEventListener("click", action);
-            actions.set(element, action);
-        }
-    }
-    
-    static Component = class extends Enliwfen.EnliwfenedElement {
-        constructor(element) {
-            super(element);
-        }
-        
-        async update() {
-            const element = this.element;
-            
-            element.dispatchEvent(new CustomEvent("enliwfen.update.before"));
-            await this.fetch();
-            element.querySelectorAll(".enliwfen").forEach(element => {
-                console.log(element);
-                
-                switch (element.tagName) {
-                    case "A":
-                    case "BUTTON":
-                        this.newAction(element);
-                        break;
-                        
-                    case "FORM":
-                        this.newForm(element);
-                        break;
-                        
-                    default:
-                        this.newComponent(element);
+                },
+                onElUpdated: (element) => {
+                    if (element.classList.contains("enliwfen")) {
+                        /*
+                         * The element has been updated. Create a new
+                         * feature of it, if there were no feature
+                         * for the element so far.
+                         */
+                        FeatureFactory.createFeature(element);
+                    }
+                },
+                onNodeDiscarded: (node) => {
+                    if (node.classList && node.classList.contains("enliwfen")) {
+                        console.debug("Remove node %o", node);
+                        FeatureFactory.destroyFeature(node);
+                    }
                 }
             });
-            element.dispatchEvent(new CustomEvent("enliwfen.update.done"));
         }
     }
     
-    static get components() {
-        if (this._components === undefined) {
-            this._components = new Map();
+    static mergeFromJson(target, data) {
+        if (target !== null) {
+            this.merge(target, data.result);
         }
         
-        return this._components;
-    }
-    
-    static newComponent(element) {
-        const components = this.components;
-        
-        if (components.get(element) === undefined) {
-            const dataset = element.dataset,
-                  component = new Enliwfen.Component(element);
-            
-            /* Initially update the component, if the attribute
-               'enliwfenDeferred' were present. */
-            if ("enliwfenDeferred" in dataset) {
-                component.update();
-            }
-            
-            if (dataset.enliwfenInterval) {
-                setInterval(() => component.update(), dataset.enliwfenInterval);
-            } else if (dataset.enliwfenEvent) {
-                const eventsource = this.newEventSource(element);
+        if (data.updates instanceof Object) {
+            for (const [id, update] of Object.entries(data.updates)) {
+                const target = document.getElementById(id);
                 
-                eventsource.addEventListener(dataset.enliwfenEvent, () => {
-                    console.debug(`Got event ${dataset.enliwfenEvent}. Component will be updated.`);
-                    component.update();
-                });
-            }
-            
-            components.set(element, component);
-        }
-    }
-    
-    static Form = class extends Enliwfen.EnliwfenedElement {
-        constructor(element) {
-            super(element);
-        }
-        
-        async load() {
-            await this.fetched(await fetch(this.element.action));
-        }
-        
-        async submit() {
-            const element = this.element;
-            
-            element.dispatchEvent(new CustomEvent("enliwfen.submission.before"));
-            await this.fetch();
-            element.dispatchEvent(new CustomEvent("enliwfen.submission.done"));  
-        }
-        
-        handleEvent(event) {
-            switch(event.type) {
-                case "submit":
-                    event.preventDefault();
-                    this.submit();
-                    break;
+                this.merge(target, update);
             }
         }
-    }
-    
-    static get forms() {
-        if (this._forms === undefined) {
-            this._forms = new Map();
-        }
-        
-        return this._forms;
     }
 
-    static async newForm(element) {
-        const forms = this.forms;
-        
-        if (forms.get(element) === undefined) {
-            const form = new Enliwfen.Form(element),
-                  dataset = element.dataset;
-            
-            if ("enliwfenDeferred" in dataset) {
-                await form.load();
-            }
-            
-            element.addEventListener("submit", form);
-            forms.set(element, form);
-        }
+}
+
+class Endpoint {
+    
+    /*
+     * @param node An instance of class FeatureNode
+     */
+    constructor(node) {
+        this._node = node;
     }
     
-    static get eventsources() {
-        if (this._eventsources === undefined) {
-            this._eventsources = new Map();
-        }
-        
-        return this._eventsources;
+    get node() {
+        return this._node;
     }
     
-    static newEventSource(element) {
-        const dataset = element.dataset,
-              url = dataset.enliwfenEventsource;
-        
-        if (url !== undefined) {
-            const eventsources = this.eventsources;
-            let eventsource = eventsources.get(url);
-            
-            if (eventsource === undefined) {
-                eventsource = new EventSource(url);
+    async succeeded(response) {
+        const contentType = response.headers.get("Content-Type"),
+              parameterIndex = contentType.indexOf(";"),
+              mimeType = parameterIndex === -1 ? contentType : contentType.substring(0, parameterIndex),
+              target = this.node.target;
+              
+        switch(mimeType) {
+            case "application/json":
+                const jsonResponse = await response.json();
                 
-                eventsources.set(url, eventsource);                
-                eventsource.addEventListener("error", (error) => {
-                    console.error(error);
-                    eventsources.delete(url);    
-                });
-            }
-            
-            return eventsource;
-        }          
-    }
-    
-    static releaseElement(element) {
-        switch (element.tagName) {
-            case "A":
-            case "BUTTON":
-                this.actions.delete(element);
-                break;
-                
-            case "FORM":
-                this.forms.delete(element);
-                break;
-                
-            default:
-                this.components.delete(element);
-        }
-    }
-    
-    static newElement(element) {
-        console.log(element);
-        
-        switch (element.tagName) {
-            case "A":
-            case "BUTTON":
-                this.newAction(element);
-                break;
-                
-            case "FORM":
-                this.newForm(element);
-                break;
-                
-            default:
-                const dataset = element.dataset;
-                
-                if ("enliwfenUrl" in dataset) {
-                    this.newComponent(element);    
-                } else if ("enliwfenToggle" in dataset) {
-                    this.newToggleAction(element);
-                } else if ("enliwfenToggleClass" in dataset) {
-                    this.newToggleClassAction(element);
-                } else if ("enliwfenEventsource" in dataset) {
-                    this.newEventSource(element);
+                if (jsonResponse.assign_location) {
+                    location.assign(jsonResponse.assign_location)
+                } else if (jsonResponse.replace_location) {
+                    location.replace(jsonResponse.replace_location)
+                } else {
+                    DOMHelper.mergeFromJson(target, jsonResponse);
                 }
+                break;
+                
+            case "text/html":
+                DOMHelper.merge(target, await response.text())
+                break;
         }
     }
     
-    static release(target) {
-        if (target.classList.contains("enlifwen")) {
-            this.releaseElement(target);
+    async failed(response) {
+        const target = this.node.target;
+        
+        switch(response.headers.get("Content-Type")) {            
+            case "application/json":
+                DOMHelper.mergeFromJson(target, await response.json());
+                break;
+                
+            case "text/html":
+                DOMHelper.merge(target, await response.text());
+                break;
+        }
+    }
+    
+    async fetched(response) {
+        switch(response.status) {
+            case 200:
+            case 201:
+                await this.succeeded(response);
+                break;
+                            
+            case 205:
+                location.reload();
+                break;
+                
+            case 500:
+                await this.failed(response);
+                break;
+        }
+    }
+
+    /*
+     * @param node An instance of class FeatureNode
+     */
+    async call() {
+        const {element, url, method, headers} = this.node,
+              requestOptions = {method: method};
+              
+        if (headers) {
+            requestOptions.headers = headers;
         }
         
-        target.querySelectorAll(".enliwfen").forEach(element => this.releaseElement(element));
-    }
-    
-    static update(target) {
-        if (target.classList.contains("enliwfen")) {
-            this.newElement(target);
+        if (element.tagName === "FORM" && method.toLowerCase() === "post") {
+            requestOptions.body = new FormData(element)
         }
-        target.querySelectorAll(".enliwfen").forEach(element => this.newElement(element));
-        
-        /*
-         * Propably a bad approach to enable script elements
-         * nested in dnyamically loaded HTML fragments.
-         */
-        /* target.querySelectorAll("script").forEach(blockedScript => {
-            const newScript = document.createElement("script");
-            
-            newScript.text = blockedScript.innerText;
-            blockedScript.replaceWith(newScript);
-        }) */
+    
+        await this.fetched(await fetch(url, requestOptions));
+    }
+
+}
+
+class Feature {
+    
+    constructor(element) {
+        this._node = new FeatureNode(element);
     }
     
-    static init() {
-        for (const element of document.getElementsByClassName("enliwfen")) {
-            this.newElement(element);
+    get node() {
+        return this._node;
+    }
+    
+    destroy() {
+        const {element, event} = this.node;
+        
+        element.removeEventListener(event, this);
+        elementMap.delete(element);
+    }
+}
+
+class ToggleAction extends Feature {
+    
+    constructor(element) {
+        super(element);
+        
+        
+        element.addEventListener(this.node.event, this);
+        elementMap.set(element, this);
+    }
+    
+    get node() {
+        return this._node;
+    }
+    
+    trigger() {
+        const {toggleAttribute, toggleClass, targets} = this.node;
+
+        if (toggleAttribute) {
+            targets.forEach(target => target.toggleAttribute(toggleAttribute));
+        } else if (toggleClass) {
+            targets.forEach(target => target.classList.toggle(toggleClass));
+        }
+    }
+    
+    handleEvent(event) {
+        if (event.type == this.node.event) {
+            this.trigger();
         }
     }
 }
 
-Enliwfen.init();
+class CheckboxGroup extends Feature {
+    
+    constructor(element) {
+        super(element);
+        
+        
+        const node = this.node,
+              groupName = node.checkboxGroup,
+              selector = `input[type='checkbox'][name='${groupName}']`;
+              
+        let checkboxes;      
+        
+        if (element.form) {
+            checkboxes = element.form.querySelectorAll(selector);
+        } else {
+            checkboxes = document.querySelectorAll(selector);
+        }
+
+        element.addEventListener(node.event, this);
+        checkboxes.forEach(checkbox => checkbox.addEventListener("change", this));
+        elementMap.set(element, this);
+        
+        this._checkboxes = checkboxes;
+    }
+    
+    get checkboxes() {
+        return this._checkboxes;
+    }
+    
+    destroy() {
+        this.checkboxes.forEach(checkbox => checkbox.removeEventListener("change", this));
+        
+        super.clear();
+    }
+    
+    handleEvent(event) {
+        const element = this.node.element,
+              currentTarget = event.currentTarget;
+              
+        if (currentTarget === element && event.type === this.node.event) {
+            const newStatus = element.checked;
+            
+            this.checkboxes.forEach(checkbox => checkbox.checked = newStatus);
+        } else if (currentTarget !== element && event.type === "change") {
+            if (!currentTarget.checked && element.checked){
+                element.checked = false;
+            } else if (!element.checked && Array.prototype.every.call(this.checkboxes, checkbox => checkbox.checked)) {
+                element.checked = true;
+            }
+        }
+    }
+    
+}
+
+class ServerInteractionFeature extends Feature {
+    
+    constructor(element) {
+        super(element);
+
+        this._endpoint = new Endpoint(this._node);
+    }
+    
+    get endpoint() {
+        return this._endpoint;
+    }
+    
+    async callServer({eventBefore, eventAfter} = {}) {
+        const node = this.node;
+        
+        if (eventBefore) {
+            node.dispatchEvent(`enliwfen.${eventBefore}`);
+        }
+        
+        await this.endpoint.call();
+        
+        if (eventAfter) {
+            node.dispatchEvent(`enliwfen.${eventAfter}`);
+        }
+    }
+ }
+ 
+class ActionCall extends ServerInteractionFeature {
+    
+    constructor(element) {
+        super(element);
+        
+        this.node.element.addEventListener(this.node.event, this);
+        elementMap.set(element, this);
+    }
+    
+    handleEvent(event) {
+        if (event.type === this.node.event) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.callServer({eventBefore: "action.before", eventAfter: "action.done"});
+        }
+    }
+}
+
+class EventSourceMap {
+        
+    static get(node) {
+        const url = node.eventSource;
+        let eventSource = undefined;
+        
+        if (url) {
+            let eventSources = this._eventSources;
+            
+            if (eventSources === undefined) {
+                eventSource = new EventSource(url);
+                 
+                this._eventSources = eventSources = new Map();
+                eventSources.set(url, eventSource);
+            } else {
+                eventSource = eventSources.get(url);
+                
+                if (eventSource === undefined) {
+                    eventSource = new EventSource(url);
+                    
+                    eventSources.set(url, eventSource);
+                }
+            }
+            
+            eventSource.addEventListener("error", () => {
+                console.error(error);
+                eventSources.delete(url);
+            });
+        }
+        
+        return eventSource;
+    }
+    
+    find(node) {
+        return this._eventSources.get(node.eventSource);
+    }
+}
+
+class Component extends ServerInteractionFeature {
+    
+    constructor(element) {
+        super(element);
+
+        const node = this.node,
+              interval = node.interval;
+        
+        if (node.deferred) {
+            this.callServer();
+        } else if (interval) {
+            this._intervalID = setInterval(() => this.callServer({eventBefore: "update.before", eventAfter: "update.done"}), interval);
+            elementMap.set(element, this);
+        } else if (node.event) {
+            const eventSource = EventSourceMap.get(node);
+            
+            if (eventSource) {
+                eventSource.addEventListener(node.event, this);
+                this._eventSource = eventSource;
+                elementMap.set(element, this);
+            }
+        }
+    }
+    
+    destroy() {
+        if (this._intervalID !== undefined) {
+            clearInterval(this._intervalID);
+        }
+        
+        if (this._eventSource !== undefined) {
+            const eventSource = EventSourceMap.find(this.node);
+            
+            if (eventSource !== undefined) {
+                eventSource.removeEventListener(this.node.event, this);
+            }
+        }
+        
+        super.destroy()
+    }
+    
+    handleEvent(event) {
+        if (event.type === this.node.event) {
+            console.debug(`Got event ${this.node.event}. Component will be updated.`);
+            this.callServer({eventBefore: "update.before", eventAfter: "update.done"});
+        }
+    }
+    
+}
+
+class Form extends ServerInteractionFeature {
+    
+    constructor(element) {
+        super(element);
+        
+        const node = this.node;
+        
+        if (node.deferred) {
+            this.endpoint.call();
+        } else {
+            element.addEventListener(node.event, this);
+        }
+        
+        elementMap.set(element, this);
+    }
+
+    handleEvent(event) {
+        if (event.type === this.node.event) {
+            event.preventDefault();
+            this.callServer({eventBefore: "submission.before", eventAfter: "submission.after"});
+        }
+    }
+    
+}
+
+
+class FeatureFactory {
+    
+    static createFeature(element) {
+        if (! elementMap.has(element)) {
+            switch (element.tagName) {
+                case "A":
+                case "BUTTON":
+                    new ActionCall(element);
+                    break;
+                    
+                case "FORM":
+                    new Form(element);
+                    break;
+                    
+                default:
+                    const dataset = element.dataset;
+                    
+                    if ("enliwfenUrl" in dataset) {
+                        new Component(element);
+                    } else if ("enliwfenToggle" in dataset || "enliwfenToggleClass" in dataset) {
+                        new ToggleAction(element);
+                    } else if ("enliwfenCheckboxGroup" in dataset  && element.tagName === "INPUT") {
+                        new CheckboxGroup(element);
+                    } else if ("enliwfenEventsource" in dataset) {
+                        EventSourceMap.get(new FeatureNode(element));
+                    }
+            }
+        }
+    }
+    
+    static destroyFeature(element) {
+        const feature = elementMap.get(element);
+        
+        if (feature !== undefined) {
+            feature.destroy();
+        }
+    }
+    
+    static createFeatures() {
+        for (const element of document.getElementsByClassName("enliwfen")) {
+            this.createFeature(element);
+        }
+    }
+}
+
+
+class Enliwfen {
+    static version() {
+        return version;
+    }    
+}
+
+FeatureFactory.createFeatures();
 
 export default Enliwfen;
