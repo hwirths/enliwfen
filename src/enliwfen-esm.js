@@ -407,7 +407,7 @@ class CheckboxGroup extends Feature {
     destroy() {
         this.checkboxes.forEach(checkbox => checkbox.removeEventListener("change", this));
         
-        super.clear();
+        super.destroy();
     }
     
     handleEvent(event) {
