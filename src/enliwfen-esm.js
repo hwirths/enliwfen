@@ -173,19 +173,34 @@ class DOMHelper {
     
     static merge(target, contents) {
         if (target !== null) {
+            const featureNodes = []
+            
+            /* Merge the updated document fragment into
+               document. Therein:
+                - Destroy features built on nodes removed
+                  from the document
+                - Destroy features of nodes before they are updated,
+                  if the updated node had either a different ID or
+                  different enliwfen settings.
+                - Collect new and updated feature nodes
+               New and updated feature nodes are collected first and
+               are created after the document fragment has completely
+               been merged. Direct creation of feature nodes could
+               be incomplete, if they include nodes not added to the
+               document yet. */ 
             morphdom(target, contents, {
                 onNodeAdded: (node) => {
                     if (node.classList && node.classList.contains("enliwfen")) {
                         console.debug("Add node %o", node);
-                        FeatureFactory.createFeature(node);
+                        /* A feature node. Add it to the list of feature
+                           nodes. They are created after finishing the merge. */
+                        featureNodes.push(node);
                     }
                 },
                 onBeforeElUpdated: (fromElement, toElement) => {
                     if (fromElement.classList.contains("enliwfen")) {
-                        /*
-                         * Remove a feature, if the new element either
-                         * has a different ID or different 'enliwfen' settings.
-                         */
+                        /* Remove the feature, if the new element either
+                         * has a different ID or different 'enliwfen' settings. */
                         if (fromElement.id !== toElement.id) {
                             console.debug("Update needed due to different id! %o : %o", fromElement, toElement);
                             FeatureFactory.destroyFeature(fromElement);
@@ -203,12 +218,10 @@ class DOMHelper {
                 },
                 onElUpdated: (element) => {
                     if (element.classList.contains("enliwfen")) {
-                        /*
-                         * The element has been updated. Create a new
-                         * feature of it, if there were no feature
-                         * for the element so far.
-                         */
-                        FeatureFactory.createFeature(element);
+                        /* The element has been updated. Add the element
+                           to the list of feature nodes. They are craeted
+                           after finishing the merge. */
+                        featureNodes.push(element)                        
                     }
                 },
                 onNodeDiscarded: (node) => {
@@ -218,6 +231,10 @@ class DOMHelper {
                     }
                 }
             });
+            
+            /* Now that the updates have been merged into the document
+               the collected feature nodes can be created. */
+            featureNodes.forEach(node => FeatureFactory.createFeature(node));
         }
     }
     
@@ -301,6 +318,9 @@ class Endpoint {
                 break;
                 
             case 500:
+                /* An internal server error should
+                 * be reported to a corresponding
+                 * location on the page. */
                 await this.failed(response);
                 break;
         }
