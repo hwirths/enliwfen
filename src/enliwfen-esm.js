@@ -273,22 +273,57 @@ class Endpoint {
               mimeType = parameterIndex === -1 ? contentType : contentType.substring(0, parameterIndex),
               target = this.node.target;
               
-        switch(mimeType) {
-            case "application/json":
-                const jsonResponse = await response.json();
+        if (response.headers.has("Content-Length")) {
+            switch(mimeType) {
+                case "application/json":
+                    const jsonResponse = await response.json();
+                    
+                    if (jsonResponse.assign_location) {
+                        location.assign(jsonResponse.assign_location)
+                    } else if (jsonResponse.replace_location) {
+                        location.replace(jsonResponse.replace_location)
+                    } else {
+                        DOMHelper.mergeFromJson(target, jsonResponse);
+                    }
+                    break;
                 
-                if (jsonResponse.assign_location) {
-                    location.assign(jsonResponse.assign_location)
-                } else if (jsonResponse.replace_location) {
-                    location.replace(jsonResponse.replace_location)
-                } else {
-                    DOMHelper.mergeFromJson(target, jsonResponse);
+                case "text/html":
+                    DOMHelper.merge(target, await response.text())
+                    break;
+            }
+        } else {
+            const reader = response.body.getReader(),
+                  utf8Decoder = new TextDecoder("utf-8");
+            
+            reader.read().then(function nextChunk({done, value}) {
+                if (value) {
+                    const text = utf8Decoder.decode(value);
+                    
+                    switch(mimeType) {
+                        case "application/json":
+                            const jsonResponse = JSON.parse(text);
+                            
+                            if (jsonResponse.assign_location) {
+                                location.assign(jsonResponse.assign_location)
+                            } else if (jsonResponse.replace_location) {
+                                location.replace(jsonResponse.replace_location)
+                            } else {
+                                DOMHelper.mergeFromJson(target, jsonResponse);
+                            }
+                            break;
+                        
+                        case "text/html":
+                            DOMHelper.merge(target, text)
+                            break;
+                    }
                 }
-                break;
                 
-            case "text/html":
-                DOMHelper.merge(target, await response.text())
-                break;
+                if (done) {
+                    return;
+                }
+                
+                return reader.read().then(nextChunk);
+            })
         }
     }
     
