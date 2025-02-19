@@ -291,30 +291,50 @@ class Endpoint {
                     DOMHelper.merge(target, await response.text())
                     break;
             }
-        } else {
+        } else if (mimeType === "text/plain") {
             const reader = response.body.getReader(),
-                  utf8Decoder = new TextDecoder("utf-8");
+                  utf8Decoder = new TextDecoder("utf-8"),
+                  updateStart = "\nenliwfen_update_start:\n",
+                  updateEnd = "\n:enliwfen_update_end\n";
+                  
+            let currentUpdate, remainingText = "";
             
             reader.read().then(function nextChunk({done, value}) {
                 if (value) {
                     const text = utf8Decoder.decode(value);
                     
-                    switch(mimeType) {
-                        case "application/json":
-                            const jsonResponse = JSON.parse(text);
-                            
-                            if (jsonResponse.assign_location) {
-                                location.assign(jsonResponse.assign_location)
-                            } else if (jsonResponse.replace_location) {
-                                location.replace(jsonResponse.replace_location)
-                            } else {
-                                DOMHelper.mergeFromJson(target, jsonResponse);
-                            }
-                            break;
+                    remainingText += text;
+                    
+                    
+                    if (! currentUpdate) {
+                        const startOfUpdate = remainingText.indexOf(updateStart);
                         
-                        case "text/html":
-                            DOMHelper.merge(target, text)
+                        if (startOfUpdate !== -1) {
+                            currentUpdate = remainingText.substring(startOfUpdate + updateStart.length);
+                            remainingText = currentUpdate;
+                        }
+                    } 
+                    
+                    while (currentUpdate) {
+                        const endOfUpdate = remainingText.indexOf(updateEnd);
+                                                
+                        if (endOfUpdate === -1) {
                             break;
+                        } else {
+                            currentUpdate = remainingText.substring(0, endOfUpdate);
+                            remainingText = remainingText.substring(endOfUpdate + updateEnd.length);
+                            
+                            DOMHelper.merge(target, currentUpdate);
+                            
+                            const startOfUpdate = remainingText.indexOf(updateStart);
+                            
+                            if (startOfUpdate === -1) {
+                                currentUpdate = undefined
+                            } else {
+                                currentUpdate = remainingText.substring(startOfUpdate + updateStart.length);
+                                remainingText = currentUpdate;
+                            }
+                        }
                     }
                 }
                 
