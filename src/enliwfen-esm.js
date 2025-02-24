@@ -292,8 +292,7 @@ class Endpoint {
                     break;
             }
         } else {
-            const reader = response.body.getReader(),
-                  utf8Decoder = new TextDecoder("utf-8"),
+            const utf8Decoder = new TextDecoder("utf-8"),
                   updateStart = "\n:enliwfen_update_start:\n",
                   updateEnd = "\n:enliwfen_update_end:\n",
                   streamProtocolIdentifier = ":enliwfen_stream_protocol:\n",
@@ -301,9 +300,9 @@ class Endpoint {
                   
             let enliwfenStreamProtocol, currentUpdate, remainingText = "";
             
-            reader.read().then(function nextChunk({done, value}) {
-                if (value) {
-                    const text = utf8Decoder.decode(value);
+            try {
+                for await (const chunk of response.body) {
+                    const text = utf8Decoder.decode(chunk);
                     
                     remainingText += text;
                     
@@ -357,37 +356,33 @@ class Endpoint {
                                     remainingText = currentUpdate;
                                 }
                             }
-                        }
-                    }               
-                }
-                
-                if (done) {
-                    if (! enliwfenStreamProtocol) {
-                        switch(mimeType) {
-                            case "application/json":
-                                const jsonResponse = JSON.parse(remainingText);
-                                
-                                if (jsonResponse.assign_location) {
-                                    location.assign(jsonResponse.assign_location);
-                                } else if (jsonResponse.replace_location) {
-                                    location.replace(jsonResponse.replace_location);
-                                } else {
-                                    DOMHelper.mergeFromJson(target, jsonResponse);
-                                }
-                                break;
+                        } /* endwhile (currentUdate) */
+                    } /* endif (enliwfenStreamProtocol === true) */               
+                } /* endfor (chunk of response.body) */
+            
+                if (! enliwfenStreamProtocol) {
+                    switch(mimeType) {
+                        case "application/json":
+                            const jsonResponse = JSON.parse(remainingText);
                             
-                            case "text/html":
-                                DOMHelper.merge(target, remainingText);
-                                break;
-                        }
+                            if (jsonResponse.assign_location) {
+                                location.assign(jsonResponse.assign_location);
+                            } else if (jsonResponse.replace_location) {
+                                location.replace(jsonResponse.replace_location);
+                            } else {
+                                DOMHelper.mergeFromJson(target, jsonResponse);
+                            }
+                            break;
+                        
+                        case "text/html":
+                            DOMHelper.merge(target, remainingText);
+                            break;
                     }
-                    
-                    return;
                 }
-                
-                return reader.read().then(nextChunk);
-            })
-        }
+            } catch (error) {
+                console.error(`Failed to read the stream from ${this.node.url} ({error})`)
+            }
+        } /* endif (response.headers.has("Content-Length")) */
     }
     
     async failed(response) {
