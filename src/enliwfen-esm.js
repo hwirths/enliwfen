@@ -153,7 +153,7 @@ class FeatureNode {
     }
     
     get eventSource() {
-        const eventSource = this.dataset.enliwfenEventSource;
+        const eventSource = this.dataset.enliwfenEventsource;
         
         return eventSource ? eventSource : null;
     }
@@ -611,8 +611,8 @@ class EventSourceMap {
                 }
             }
             
-            eventSource.addEventListener("error", () => {
-                console.error(error);
+            eventSource.addEventListener("error", (event) => {
+                console.error(event);
                 eventSources.delete(url);
             });
         }
@@ -667,8 +667,18 @@ class Component extends ServerInteractionFeature {
     
     handleEvent(event) {
         if (event.type === this.node.event) {
-            console.debug(`Got event ${this.node.event}. Component will be updated.`);
-            this.callServer({eventBefore: "update.before", eventAfter: "update.done"});
+            if (event.data) {
+                console.debug(`Got event data ${event.data}.`);
+                try {
+                    const jsonUpdates = JSON.parse(event.data);
+                    DOMHelper.mergeFromJson(null, jsonUpdates)
+                } catch (error) {
+                    console.warn(`Error parsing expected JSON string : ${error}`);
+                }
+            } else {
+                console.debug(`Got event ${this.node.event}. Component will be updated.`);
+                this.callServer({eventBefore: "update.before", eventAfter: "update.done"});
+            }
         }
     }
     
