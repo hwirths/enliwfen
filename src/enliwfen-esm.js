@@ -1,13 +1,20 @@
-/* Import morphdom used to merge returned document fragments
- * into the live document.
- * The import requires an import map as described for example
- * here : https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script/type/importmap
+/*
+ Import morphdom used to merge returned document fragments
+ into the live document.
+ The import requires an import map as described for example
+ here : https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script/type/importmap
  */
 import morphdom from "morphdom"
 
 const version = "0.1.0"
 const elementMap = new Map()
 
+/*
+ A feature node wraps an element intended
+ to be enlivened. It provides the properties
+ taken from the elements itself and the 
+ data-enliwfen-* attributes, respectively.
+ */
 class FeatureNode {
     
     constructor(element) {
@@ -15,14 +22,35 @@ class FeatureNode {
         this._dataset = element.dataset;
     }
     
+    /*
+     Returns the wrapped element
+     */
     get element() {
         return this._element;
     }
     
+    /*
+     Gives access to the data-* attributes
+     of the wrapped element
+     */
     get dataset() {
         return this._dataset;
     }
     
+    /*
+     Returns the URL to be used for AJAX
+     requests. The URL is discovered as follows:
+      - Given an anchor element, the URL is
+        taken from tehe attribute 'href'
+      - Given a button element, the URL is taken
+        either from the attribute 'formaction' if given
+        or from the attribute 'data-enliwfen-url'
+        otherwise.
+      - Given a form element, the URL is taken from
+        the attribute 'action'.
+      - Given any other element, the URL is taken from
+        the attribute 'dataenliwfen-url'.
+     */
     get url() {
         if (this._url === undefined) {
             const element = this._element;
@@ -45,6 +73,19 @@ class FeatureNode {
         return this._url            
     }
     
+    /*
+     Returns the method to use for an AJAX call.
+     The method is determined as follows:
+       - Given a form element:
+          - If the attribute 'data-enliwfen-deferred' is given,
+            the method 'GET' will be returned, in order to initially
+            load the form.
+          - Otherwise the method is taken from the attribute 'method'.
+       - Given any other element:
+          - If given the method is taken from the attribute
+            'data-enliwfen-method'.
+          - Otherwise the default method 'GET' will be returned.
+     */
     get method() {
         if (this._method === undefined) {
             const element = this._element;
@@ -61,6 +102,14 @@ class FeatureNode {
         return this._method
     }
     
+    /*
+     Delivers the additional HTTP headers to add to an AJAX
+     request. They are taken from the attribute
+     'data-enliwfen-headers', if given. The content
+     of the attribute 'data-enliwfen-headers' is expected
+     to be a JSON object, where each key / value pair
+     specifies a header entry.   
+     */
     get headers() {
         if (this._headers === undefined) {
             const headers = this.dataset.enliwfenHeaders;
@@ -71,6 +120,19 @@ class FeatureNode {
         return this._headers
     }
     
+    /*
+     Delivers the target of the feature defined by
+     this node. This may be the element addressed
+     to take the resul of an AJAX reqeuest or an action
+     like toggling a class. If given, the first element
+     matching the selector given in the attribute
+     'data-enliwfen-target' is returned. The method
+     'document.querySelector()' is used for the query.
+     Remind, that addressing a target by its id,
+     the id needs to be prepended by the character '#'.
+     If the attribute 'data-enliwfen-target' is missing,
+     the wrapped element itself is taken as target. 
+     */
     get target() {
         if (this._target === undefined) {
             const element = this._element;
@@ -86,6 +148,18 @@ class FeatureNode {
         return this._target;
     }
     
+    /*
+     Delivers the targets of the feature defined by
+     this node. This may be the members of a checkbox
+     group or elements taking the result of an AJAX request.
+     The list is determined as follows:
+      - If given, the attribute 'data-enliwfen-targets' contains
+        the query selector addressing the target elements. The
+        method document.querySelectorAll() is used to query
+        the target elements.
+      - Otherwise the list is filled with the target element
+        returned by the property 'target' of this node.
+     */
     get targets() {
         if (this._targets === undefined) {
             const element = this._element;
@@ -103,24 +177,60 @@ class FeatureNode {
         return this._targets;
     }
     
+    /*
+     Delivers the event triggering for example the
+     submission of a from or the toggling of an attribute.
+     The event is determined as follows:
+      - If given, the event is taken from the attribute
+        'data-enliwfen-event'.
+      - Otherwise a default event is eturned:
+         - Given a form element, event 'submit' is
+           returned.
+         - Given an input element, event 'input'
+           is returned on an input element associated
+           with a datalist and event 'change' on
+           any other input elements  
+         - Given any other element, event 'click'
+           is returned.
+     */
     get event() {
         if (this._event === undefined) {
             const event = this.dataset.enliwfenEvent;
             
             if (event !== undefined) {
                 this._event = event;
-            } else if (this.element.tagName === "FORM") {
-                this._event = "submit";
-            } else if (this.element.tagName === "INPUT") {
-                this._event = "change";
             } else {
-                this._event = "click";
-            }
+                const element = this.element;
+                
+                switch(element.tagName) {
+                    case "FORM":
+                        this._event = "submit";
+                        break;
+                        
+                    case "INPUT":
+                        if (element.hasAttribute("list")) {
+                            this._event = "input";
+                        } else {
+                            this._event = "change";
+                        }
+                        break;
+                        
+                    default:
+                        this._event = "click";
+                };
+            } 
         }
         
         return this._event;
     }
     
+    /*
+     Delivers the name of the attribute intended
+     to be toggled. It is taken from the attribute
+     'data-enliwfen-toggle'. If the attribute
+     'data-enliwfen-toggle' is missing, 'null'
+     will be returned.
+     */ 
     get toggleAttribute() {
         if (this._toggleAttribute === undefined) {
             const toggle = this.dataset.enliwfenToggle;
@@ -169,6 +279,8 @@ class FeatureNode {
     }
 }
 
+/*
+*/
 class DOMHelper {
     
     static merge(target, contents) {
@@ -709,8 +821,64 @@ class Form extends ServerInteractionFeature {
     
 }
 
+class Datalist extends Feature {
+    
+    constructor(element) {
+        super(element);
+        
+        this._datalist = undefined;
+        this._scheduled = undefined;
+        this._lastMatch = undefined;
+        
+        const datalistElement = document.querySelector(`#${element.getAttribute("list")}`);
+        
+        if (datalistElement !== null) {
+            this._datalist = new Component(datalistElement);
+            element.addEventListener(this.node.event, this);
+        }
+    }
+    
+    handleEvent(event) {
+        const datalist = this._datalist;
+        
+        if ((datalist !== undefined) && (event.type == this.node.event)) {
+            const {element, dataset} = this.node,
+                  matches = element.value.match(dataset.enliwfenPattern);
+            
+            if (matches && (matches[0] !== this._lastMatch)) {
+                this._lastMatch = matches[0]
+                datalist.node.dataset.enliwfenUrl = `${dataset.enliwfenUrl}?stem=${matches[0]}`;
+                
+                if (this._scheduled !== undefined) {
+                    clearTimeout(this._scheduled);
+                }
+                
+                this._scheduled = setTimeout(
+                    () => {
+                        datalist.callServer({eventBefore: "datalist.before", eventAfter: "datalist.done"});
+                        this._scheduled = undefined;   
+                    },
+                    200);
+            }
+        }
+    }
+}
 
 class FeatureFactory {
+    
+    static createFeatureFromDataset(element) {
+        const dataset = element.dataset;
+        
+        if ("enliwfenUrl" in dataset) {
+            new Component(element);
+        } else if ("enliwfenToggle" in dataset || "enliwfenToggleClass" in dataset) {
+            new ToggleAction(element);
+        } else if ("enliwfenCheckboxGroup" in dataset  && element.tagName === "INPUT") {
+            new CheckboxGroup(element);
+        } else if ("enliwfenEventsource" in dataset) {
+            EventSourceMap.get(new FeatureNode(element));
+        }
+    }
     
     static createFeature(element) {
         if (! elementMap.has(element)) {
@@ -724,18 +892,15 @@ class FeatureFactory {
                     new Form(element);
                     break;
                     
-                default:
-                    const dataset = element.dataset;
-                    
-                    if ("enliwfenUrl" in dataset) {
-                        new Component(element);
-                    } else if ("enliwfenToggle" in dataset || "enliwfenToggleClass" in dataset) {
-                        new ToggleAction(element);
-                    } else if ("enliwfenCheckboxGroup" in dataset  && element.tagName === "INPUT") {
-                        new CheckboxGroup(element);
-                    } else if ("enliwfenEventsource" in dataset) {
-                        EventSourceMap.get(new FeatureNode(element));
+                case "INPUT":
+                    if (element.hasAttribute("list")) {
+                        new Datalist(element);    
+                    } else {
+                        this.createFeatureFromDataset(element);
                     }
+                    
+                default:
+                    this.createFeatureFromDataset(element);
             }
         }
     }
