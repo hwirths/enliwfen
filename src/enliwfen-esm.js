@@ -60,7 +60,8 @@ class FeatureNode {
                     return element.href;
                 
                 case "BUTTON":
-                    return element.getAttribute("formaction") || element.dataset.enliwfenUrl
+                case "INPUT":
+                    return element.formAction || element.dataset.enliwfenUrl
                 
                 case "FORM":
                     return element.action
@@ -81,6 +82,10 @@ class FeatureNode {
             the method 'GET' will be returned, in order to initially
             load the form.
           - Otherwise the method is taken from the attribute 'method'.
+       - Given a button or input element:
+          - If given the value of the attribut 'formmethod' will
+            returned.
+          - Otherwise 'GET' will be returned.
        - Given any other element:
           - If given the method is taken from the attribute
             'data-enliwfen-method'.
@@ -94,6 +99,10 @@ class FeatureNode {
                 case "FORM":
                     return this.deferred ? "GET" : element.method
                 
+                case "BUTTON":
+                case "INPUT":
+                    return element.formMethod || "GET"
+                    
                 default:
                     return element.dataset.enliwfenMethod || "GET"
             }
@@ -542,8 +551,19 @@ class Endpoint {
             requestOptions.headers = headers;
         }
         
-        if (element.tagName === "FORM" && method.toLowerCase() === "post") {
-            requestOptions.body = new FormData(element)
+        switch(element.tagName) {
+            case "FORM":
+                if (method.toLowerCase() === "post") {
+                    requestOptions.body = new FormData(element);
+                }
+                break;
+                
+            case "BUTTON":
+            case "INPUT":
+                if (method.toLowerCase() === "post") {
+                    requestOptions.body = new FormData(element.form);
+                }
+                break;
         }
     
         await this.fetched(await fetch(url, requestOptions));
