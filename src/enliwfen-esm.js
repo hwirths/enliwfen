@@ -61,10 +61,10 @@ class FeatureNode {
                 
                 case "BUTTON":
                 case "INPUT":
-                    return element.formAction || element.dataset.enliwfenUrl
+                    return element.dataset.enliwfenUrl || element.formAction; 
                 
                 case "FORM":
-                    return element.action
+                    return element.action;
                 
                 default:
                     return element.dataset.enliwfenUrl;
