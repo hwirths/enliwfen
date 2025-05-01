@@ -413,10 +413,40 @@ class DOMHelper {
         body.appendChild(errorContainer);
         errorDialog.showModal();
     }
+    
+    static createError(response) {
+        const errorDocument = `<html><body>
+<h1>Unsupported response</h1>
+<table>
+<tbody>
+<tr>
+<td>HTTP status code</td><td>${response.status}</td>
+</tr>
+<tr>
+<td>HTTP status text</td><td>${response.statusText}</td>
+</tr>
+<tr>
+<td>Content-Type</td><td>${response.headers.get("Content-Type")}</td>
+</tr>
+</tbody>
+</table>        
+</body></html>`;
+
+        DOMHelper.showError(errorDocument);
+    }
 
 }
 
 class Endpoint {
+    
+    static getMimeType(response) {
+        const contentType = response.headers.get("Content-Type"),
+              parameterIndex = contentType.indexOf(";");
+              
+        return parameterIndex === -1 ?
+            contentType
+            : contentType.substring(0, parameterIndex);
+    }
     
     /*
      * @param node An instance of class FeatureNode
@@ -430,9 +460,7 @@ class Endpoint {
     }
     
     async succeeded(response) {
-        const contentType = response.headers.get("Content-Type"),
-              parameterIndex = contentType.indexOf(";"),
-              mimeType = parameterIndex === -1 ? contentType : contentType.substring(0, parameterIndex),
+        const mimeType = Endpoint.getMimeType(response),
               target = this.node.target;
               
         if (response.headers.has("Content-Length")) {
@@ -452,6 +480,9 @@ class Endpoint {
                 case "text/html":
                     DOMHelper.merge(target, await response.text());
                     break;
+                    
+                default:
+                    DOMHelper.createError(response);
             }
         } else {
             const utf8Decoder = new TextDecoder("utf-8"),
@@ -539,6 +570,9 @@ class Endpoint {
                         case "text/html":
                             DOMHelper.merge(target, remainingText);
                             break;
+                            
+                        default:
+                            DOMHelper.createError(response);
                     }
                 }
             } catch (error) {
@@ -550,7 +584,7 @@ class Endpoint {
     async failed(response) {
         const target = this.node.target;
         
-        switch(response.headers.get("Content-Type")) {            
+        switch(Endpoint.getMimeType(response)) {            
             case "application/json":
                 DOMHelper.mergeFromJson(target, await response.json());
                 break;
@@ -558,32 +592,58 @@ class Endpoint {
             case "text/html":
                 DOMHelper.merge(target, await response.text());
                 break;
+                
+            default:
+                DOMHelper.createError(response);
         }
     }
     
     async fetched(response) {
         switch(response.status) {
-            case 200:
-            case 201:
+            case 200: /* OK */
+            case 201: /* CREATED */
+            case 202: /* ACCEPTED */
+            case 203: /* NON-AUTHORITATIVE INFORMATION */
+                /* Each of these HTTP response status codes indicate
+                   a successfully processed / accepted request. 
+                   As even an accepted request may return data,
+                   the returned data will be inserted / merged into
+                   the document as specified by the feature node. */
                 await this.succeeded(response);
                 break;
-                            
-            case 205:
+            
+            case 205: /* RESET CONTENT */
+                /* The server asks to reset the content of
+                   the document, which sent the request.
+                   The entire page is reloaded. */
                 location.reload();
                 break;
-                
+            
             case 500:
-                /* An internal server error should
-                 * be reported to a corresponding
-                 * location on the page. */
+                /* An internal server error is expected
+                   to return some information on the cause
+                   of the error. Within the context of enliwfen
+                   the reurned information is handled like the
+                   returned data of a successful request. It
+                   will be inserted / merged into the document
+                   as specified by the feature node. */
                 await this.failed(response);
                 break;
                 
+            case 204: /* NO CONTENT */
+                /* The request has been successfully processed but
+                   did not return any data.
+                   There is nothing to do for enliwfen. */
+                break;
+                
             default:
-                switch(response.headers.get("Content-Type").split(";")[0]) {            
+                switch(Endpoint.getMimeType(response)) {            
                     case "text/html":
                         DOMHelper.showError(await response.text());
                         break;
+                        
+                    default:
+                        DOMHelper.createError(response);
                 }
         }
     }
