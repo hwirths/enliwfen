@@ -372,6 +372,47 @@ class DOMHelper {
             }
         }
     }
+    
+    static showError(data) {
+        /* Create the elements used to build the error dialog
+           and to present the error page. */
+        const errorContainer = document.createElement("div"),
+              shadowRoot = errorContainer.attachShadow({mode: "open"}),
+              errorDialog = document.createElement("dialog"),
+              closeButton = document.createElement("button"),
+              errorPage = document.createElement("iframe"),
+              body = document.body;
+
+        /* Configure the error page and set the data */        
+        errorPage.setAttribute("sandbox", "");        
+        errorPage.setAttribute("style", "width: 100%; height: 100%")
+        errorPage.setAttribute("srcdoc", data);
+        
+        /* Configure the close button */
+        closeButton.appendChild(document.createTextNode("X"));
+        closeButton.setAttribute("autofocus", "");
+        closeButton.setAttribute("style", "display: block; width: 2rem; border: 0; float: right; font-size: 2rem;");
+        
+        /* On click close the error dialog */
+        closeButton.addEventListener("click", () => errorDialog.close());
+
+        /* Configure the error dialog and append the
+           close button and the iframe. */
+        errorDialog.setAttribute("style", "width: 75vw; height:75vh;");
+        errorDialog.appendChild(closeButton);
+        errorDialog.appendChild(errorPage);
+        
+        /* Remove the error container from the body
+           on close of the error dialog */
+        errorDialog.addEventListener("close", () => errorContainer.remove());
+        
+        /* Append the error dialog to the shadow root,
+           the error container to the body and
+           show the dialog in modal shape */
+        shadowRoot.appendChild(errorDialog);
+        body.appendChild(errorContainer);
+        errorDialog.showModal();
+    }
 
 }
 
@@ -537,6 +578,13 @@ class Endpoint {
                  * location on the page. */
                 await this.failed(response);
                 break;
+                
+            default:
+                switch(response.headers.get("Content-Type").split(";")[0]) {            
+                    case "text/html":
+                        DOMHelper.showError(await response.text());
+                        break;
+                }
         }
     }
 
