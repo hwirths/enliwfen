@@ -782,6 +782,21 @@ class CheckboxGroup extends Feature {
     
 }
 
+class Dialog extends Feature {
+    
+    constructor(element) {
+        const dismissButtons = element.querySelectorAll("[data-enliwfen-dismissdialog]");
+        
+        super(element);
+        
+        dismissButtons.forEach(button => button.addEventListener("click", () => element.close()));
+        
+        if (element.dataset.enliwfenDialogstatus === "open") {
+            element.showModal();
+        }
+    }
+}
+
 class ServerInteractionFeature extends Feature {
     
     constructor(element) {
@@ -1026,7 +1041,12 @@ class FeatureFactory {
                     } else {
                         this.createFeatureFromDataset(element);
                     }
+                    break;
                     
+                case "DIALOG":
+                    new Dialog(element);
+                    break;
+                     
                 default:
                     this.createFeatureFromDataset(element);
             }
