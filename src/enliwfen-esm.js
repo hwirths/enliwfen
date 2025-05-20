@@ -61,7 +61,7 @@ class FeatureNode {
                 
                 case "BUTTON":
                 case "INPUT":
-                    return element.dataset.enliwfenUrl || element.formAction; 
+                    return element.dataset.enliwfenUrl || element.formAction;
                 
                 case "FORM":
                     return element.action;
@@ -83,8 +83,12 @@ class FeatureNode {
             load the form.
           - Otherwise the method is taken from the attribute 'method'.
        - Given a button or input element:
-          - If given the value of the attribut 'formmethod' will
-            returned.
+          - If not empty the value of the attribut 'formmethod' will
+            be returned.
+          - If the value of the attribut 'formmethod' is empty but
+            the attribute 'data-enliwfen-url' is present with a
+            non-empty value, the value of the attribute
+            'data-enliwfen-method' will be returned.
           - Otherwise 'GET' will be returned.
        - Given any other element:
           - If given the method is taken from the attribute
@@ -101,7 +105,7 @@ class FeatureNode {
                 
                 case "BUTTON":
                 case "INPUT":
-                    return element.formMethod || "GET"
+                    return element.formMethod || element.dataset.enliwfenMethod || "GET"
                     
                 default:
                     return element.dataset.enliwfenMethod || "GET"
@@ -668,7 +672,10 @@ class Endpoint {
                 
             case "BUTTON":
             case "INPUT":
-                if (method.toLowerCase() === "post") {
+                /* A request body with form data will be added, if the
+                   the element belongs to a form and the HTTP method
+                   is set to 'post'. */
+                if (element.form && (method.toLowerCase() === "post")) {
                     requestOptions.body = new FormData(element.form);
                 }
                 break;
