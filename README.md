@@ -14,12 +14,22 @@ enliwfen focuses on giving basic Javascript support addressed by attributes adde
 * Updates based on server side events
 * Toggling attributes / classes
 * Checkbox groups with a '(de-)select all' checkbox
+* Dynamic data lists
 
 A simple example:
 
 ~~~
 <html>
 <head>
+...
+<script type="importmap">
+  {
+    "imports": {
+      "morphdom": "{% static 'morphdom/js/morphdom-esm.js' %}"
+    }
+  }
+</script>
+<script type="module" src="{% static 'enliwfen/js/enliwfen-esm.js' %}"></script>
 ...
 </head>
 <body>
@@ -29,6 +39,10 @@ A simple example:
 ...
 </body>
 </html>
+~~~
+
+~~~
+
 ~~~
 
 The form handler is expected to deliver the form only, which then get's updated on the page. That's it for a simple Ajax - driven form.

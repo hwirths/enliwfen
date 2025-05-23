@@ -485,6 +485,29 @@ class Endpoint {
                     DOMHelper.merge(target, await response.text());
                     break;
                     
+                case "application/pdf":
+                case "application/zip":
+                    const content = await response.blob(),
+                          contentURL = URL.createObjectURL(content),
+                          link = document.createElement("a"),
+                          headers = response.headers;
+                    let filename;
+                                        
+                    if (headers.has("Content-Disposition")) {
+                        const filenames = headers.get("Content-Disposition").split(";").filter(e => e.trimStart().startsWith("filename"));
+                        
+                        if (filenames.length) {
+                            filename = filenames[0].trim().split("=")[1].replace("\"","") 
+                        }
+                    }
+                    
+                    link.href = contentURL;
+                    link.download = filename
+                    link.click() 
+                    
+                    URL.revokeObjectURL(contentURL);
+                    break;
+
                 default:
                     DOMHelper.createError(response);
             }
@@ -672,6 +695,7 @@ class Endpoint {
                 
             case "BUTTON":
             case "INPUT":
+            case "SELECT":
                 /* A request body with form data will be added, if the
                    the element belongs to a form and the HTTP method
                    is set to 'post'. */
@@ -1035,6 +1059,7 @@ class FeatureFactory {
             switch (element.tagName) {
                 case "A":
                 case "BUTTON":
+                case "SELECT":
                     new ActionCall(element);
                     break;
                     
