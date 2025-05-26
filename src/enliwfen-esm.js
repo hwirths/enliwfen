@@ -497,9 +497,11 @@ class Endpoint {
                         const filenames = headers.get("Content-Disposition").split(";").filter(e => e.trimStart().startsWith("filename"));
                         
                         if (filenames.length) {
-                            filename = filenames[0].trim().split("=")[1].replace("\"","") 
+                            filename = filenames[0].split("=")[1].replaceAll("\"","").trim() 
                         }
                     }
+                    
+                    console.log(`filename = ${filename}`)
                     
                     link.href = contentURL;
                     link.download = filename
