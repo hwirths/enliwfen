@@ -501,8 +501,6 @@ class Endpoint {
                         }
                     }
                     
-                    console.log(`filename = ${filename}`)
-                    
                     link.href = contentURL;
                     link.download = filename
                     link.click() 
