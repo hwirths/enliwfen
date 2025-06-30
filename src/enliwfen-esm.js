@@ -216,6 +216,12 @@ class FeatureNode {
                 const element = this.element;
                 
                 switch(element.tagName) {
+                    case "A":
+                    case "BUTTON":
+                    case "SELECT":
+                        this._event = "click";
+                        break;
+                           
                     case "FORM":
                         this._event = "submit";
                         break;
@@ -227,9 +233,9 @@ class FeatureNode {
                             this._event = "change";
                         }
                         break;
-                        
+                    
                     default:
-                        this._event = "click";
+                        this._event = null;
                 };
             } 
         }
@@ -285,6 +291,16 @@ class FeatureNode {
         const checkboxGroup = this.dataset.enliwfenCheckboxGroup;
         
         return checkboxGroup ? checkboxGroup : null;
+    }
+    
+    get observers() {
+        if (this._observers === undefined) {
+            const observers = this.dataset.enliwfenObservers;
+            
+            this._observers = observers ? observers : null;
+        }
+        
+        return this._observers;
     }
     
     dispatchEvent(eventType) {
@@ -358,8 +374,17 @@ class DOMHelper {
             });
             
             /* Now that the updates have been merged into the document
-               the collected feature nodes can be created. */
+               the collected feature nodes can be created.
+               After the features are created and therefore present
+               their observers */
             featureNodes.forEach(node => FeatureFactory.createFeature(node));
+            featureNodes.forEach(node => {
+                const feature = elementMap.get(node);
+                
+                if (feature) {
+                    feature.addObservers();
+                }
+            });
         }
     }
     
@@ -714,14 +739,52 @@ class Feature {
     
     constructor(element) {
         this._node = new FeatureNode(element);
+        this._observations = new Map();
     }
     
     get node() {
         return this._node;
     }
+        
+    startObserving(element, events) {
+        events.forEach(event => element.addEventListener(event, this));    
+        this._observations.set(element, events);
+    }
+    
+    stopObserving(element) {
+        const events = this._observations.get(element);
+        
+        if (events) {
+            events.forEach(event => element.removeEventListener(event, this));
+            this._observations.delete(element);
+        }
+    }
+    
+    addObservers() {}
+    
+    removeObservers() {
+        const {element, observers} = this.node;
+        
+        if (observers) {
+            document.querySelectorAll(observers).forEach(observerElement => {
+                const feature = elementMap.get(observerElement);
+                
+                if (feature) {
+                    feature.stopObserving(element);
+                }
+            })
+        }
+    }
     
     destroy() {
         const {element, event} = this.node;
+        
+        this.removeObservers();
+        
+        this._observations.entries().forEach(entry => {
+            entry[0].removeEventListener(entry[1], this);    
+        });
+        this._observations.clear();
         
         element.removeEventListener(event, this);
         elementMap.delete(element);
@@ -733,6 +796,7 @@ class ToggleAction extends Feature {
     constructor(element) {
         super(element);
         
+        this._open = 0;
         
         element.addEventListener(this.node.event, this);
         elementMap.set(element, this);
@@ -755,6 +819,20 @@ class ToggleAction extends Feature {
     handleEvent(event) {
         if (event.type == this.node.event) {
             this.trigger();
+        } else if (event.type.startsWith("enliwfen.")) {
+            if (event.type.endsWith(".before")) {
+                if (this._open === 0) {
+                    this.trigger();
+                }
+                
+                this._open += 1
+            } else if (event.type.endsWith(".done")) {
+                this._open -= 1;
+                
+                if (this._open === 0) {
+                    this.trigger();
+                }
+            }
         }
     }
 }
@@ -864,6 +942,20 @@ class ActionCall extends ServerInteractionFeature {
         elementMap.set(element, this);
     }
     
+    addObservers() {
+        const {element, observers} = this.node;
+        
+        if (observers) {
+            document.querySelectorAll(observers).forEach(observerElement => {
+                const feature = elementMap.get(observerElement);
+                
+                if (feature) {
+                    feature.startObserving(element, ["enliwfen.action.before", "enliwfen.action.done"]);
+                }
+            });
+        }
+    }
+    
     handleEvent(event) {
         if (event.type === this.node.event) {
             event.preventDefault();
@@ -930,8 +1022,9 @@ class Component extends ServerInteractionFeature {
             if (eventSource) {
                 eventSource.addEventListener(node.event, this);
                 this._eventSource = eventSource;
-                elementMap.set(element, this);
             }
+
+            elementMap.set(element, this);
         }
     }
     
@@ -965,6 +1058,9 @@ class Component extends ServerInteractionFeature {
                 console.debug(`Got event ${this.node.event}. Component will be updated.`);
                 this.callServer({eventBefore: "update.before", eventAfter: "update.done"});
             }
+        } else if (event.type === "enliwfen.submission.after") {
+            console.debug(`Got event 'enliwfen.submission.after'. Component will be updated.`);
+            this.callServer({eventBefore: "update.before", eventAfter: "update.done"});
         }
     }
     
@@ -986,6 +1082,20 @@ class Form extends ServerInteractionFeature {
         elementMap.set(element, this);
     }
 
+    addObservers() {
+        const {element, observers} = this.node;
+        
+        if (observers) {
+            document.querySelectorAll(observers).forEach(observerElement => {
+                const feature = elementMap.get(observerElement);
+                
+                if (feature) {
+                    feature.startObserving(element, ["enliwfen.submission.after"]);
+                }
+            });
+        } 
+    }
+    
     handleEvent(event) {
         if (event.type === this.node.event) {
             event.preventDefault();
@@ -1097,6 +1207,8 @@ class FeatureFactory {
         for (const element of document.getElementsByClassName("enliwfen")) {
             this.createFeature(element);
         }
+        
+        elementMap.values().forEach(feature => feature.addObservers())
     }
 }
 
