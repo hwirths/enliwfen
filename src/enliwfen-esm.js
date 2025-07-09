@@ -706,7 +706,7 @@ class Endpoint {
     async call() {
         const {element, url, method, headers} = this.node,
               requestOptions = {method: method};
-              
+        
         if (headers) {
             requestOptions.headers = headers;
         }
@@ -729,8 +729,10 @@ class Endpoint {
                 }
                 break;
         }
-    
+
+        element.inert = true;    
         await this.fetched(await fetch(url, requestOptions));
+        element.inert = false;
     }
 
 }
