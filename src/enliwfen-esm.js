@@ -828,7 +828,7 @@ class ToggleAction extends Feature {
                 }
                 
                 this._open += 1
-            } else if (event.type.endsWith(".done")) {
+            } else if (event.type.endsWith(".done") || event.type.endsWith(".after")) {
                 this._open -= 1;
                 
                 if (this._open === 0) {
@@ -1027,6 +1027,8 @@ class Component extends ServerInteractionFeature {
             }
 
             elementMap.set(element, this);
+        } else {
+            elementMap.set(element, this);
         }
     }
     
@@ -1060,8 +1062,12 @@ class Component extends ServerInteractionFeature {
                 console.debug(`Got event ${this.node.event}. Component will be updated.`);
                 this.callServer({eventBefore: "update.before", eventAfter: "update.done"});
             }
-        } else if (event.type === "enliwfen.submission.after") {
-            console.debug(`Got event 'enliwfen.submission.after'. Component will be updated.`);
+        } else if (event.type.startsWith("enliwfen.") &&                
+                   (event.type.endsWith(".after") || event.type.endsWith(".done"))) {
+            /* TODO: Adding a component itsel to the observers list may leed to an
+                     inifinite loop of updates!
+                     As well there are chances of circular observer chains. */ 
+            console.debug(`Got event '{event.type}'. Component will be updated.`);
             this.callServer({eventBefore: "update.before", eventAfter: "update.done"});
         }
     }
@@ -1092,7 +1098,7 @@ class Form extends ServerInteractionFeature {
                 const feature = elementMap.get(observerElement);
                 
                 if (feature) {
-                    feature.startObserving(element, ["enliwfen.submission.after"]);
+                    feature.startObserving(element, ["enliwfen.submission.before", "enliwfen.submission.after"]);
                 }
             });
         } 
