@@ -7,7 +7,7 @@
 import morphdom from "morphdom"
 
 const version = "0.1.0"
-const elementMap = new Map()
+const featureMap = new Map()
 
 /*
  A feature node wraps an element intended
@@ -308,13 +308,71 @@ class FeatureNode {
     }
 }
 
+class Feature {
+    
+    constructor(element) {
+        this._node = new FeatureNode(element);
+        this._observations = new Map();
+    }
+    
+    get node() {
+        return this._node;
+    }
+        
+    startObserving(element, events) {
+        events.forEach(event => element.addEventListener(event, this));    
+        this._observations.set(element, events);
+    }
+    
+    stopObserving(element) {
+        const events = this._observations.get(element);
+        
+        if (events) {
+            events.forEach(event => element.removeEventListener(event, this));
+            this._observations.delete(element);
+        }
+    }
+    
+    addObservers() {}
+    
+    removeObservers() {
+        const {element, observers} = this.node;
+        
+        if (observers) {
+            document.querySelectorAll(observers).forEach(observerElement => {
+                const feature = featureMap.get(observerElement);
+                
+                if (feature) {
+                    feature.stopObserving(element);
+                }
+            })
+        }
+    }
+    
+    domUpdated() {}
+    
+    destroy() {
+        const {element, event} = this.node;
+        
+        this.removeObservers();
+        
+        this._observations.entries().forEach(entry => {
+            entry[0].removeEventListener(entry[1], this);    
+        });
+        this._observations.clear();
+        
+        element.removeEventListener(event, this);
+        featureMap.delete(element);
+    }
+}
+
 /*
 */
 class DOMHelper {
     
     static merge(target, contents) {
         if (target !== null) {
-            const featureNodes = []
+            const featureNodes = [];
             
             /* Merge the updated document fragment into
                document. Therein:
@@ -329,7 +387,7 @@ class DOMHelper {
                been merged. Direct creation of feature nodes could
                be incomplete, if they include nodes not added to the
                document yet. */ 
-            morphdom(target, contents, {
+            const updatedElement = morphdom(target, contents, {
                 onNodeAdded: (node) => {
                     if (node.classList && node.classList.contains("enliwfen")) {
                         console.debug("Add node %o", node);
@@ -373,13 +431,17 @@ class DOMHelper {
                 }
             });
             
+            /* Before creating the new features the existing ones
+               are updated. */
+            featureMap.forEach(feature => feature.domUpdated(updatedElement));
+            
             /* Now that the updates have been merged into the document
                the collected feature nodes can be created.
                After the features are created and therefore present
-               their observers */
+               their observers can be initialized. */
             featureNodes.forEach(node => FeatureFactory.createFeature(node));
             featureNodes.forEach(node => {
-                const feature = elementMap.get(node);
+                const feature = featureMap.get(node);
                 
                 if (feature) {
                     feature.addObservers();
@@ -737,62 +799,6 @@ class Endpoint {
 
 }
 
-class Feature {
-    
-    constructor(element) {
-        this._node = new FeatureNode(element);
-        this._observations = new Map();
-    }
-    
-    get node() {
-        return this._node;
-    }
-        
-    startObserving(element, events) {
-        events.forEach(event => element.addEventListener(event, this));    
-        this._observations.set(element, events);
-    }
-    
-    stopObserving(element) {
-        const events = this._observations.get(element);
-        
-        if (events) {
-            events.forEach(event => element.removeEventListener(event, this));
-            this._observations.delete(element);
-        }
-    }
-    
-    addObservers() {}
-    
-    removeObservers() {
-        const {element, observers} = this.node;
-        
-        if (observers) {
-            document.querySelectorAll(observers).forEach(observerElement => {
-                const feature = elementMap.get(observerElement);
-                
-                if (feature) {
-                    feature.stopObserving(element);
-                }
-            })
-        }
-    }
-    
-    destroy() {
-        const {element, event} = this.node;
-        
-        this.removeObservers();
-        
-        this._observations.entries().forEach(entry => {
-            entry[0].removeEventListener(entry[1], this);    
-        });
-        this._observations.clear();
-        
-        element.removeEventListener(event, this);
-        elementMap.delete(element);
-    }
-}
-
 class ToggleAction extends Feature {
     
     constructor(element) {
@@ -801,7 +807,7 @@ class ToggleAction extends Feature {
         this._open = 0;
         
         element.addEventListener(this.node.event, this);
-        elementMap.set(element, this);
+        featureMap.set(element, this);
     }
     
     get node() {
@@ -843,30 +849,54 @@ class CheckboxGroup extends Feature {
     
     constructor(element) {
         super(element);
-        
-        
-        const node = this.node,
-              groupName = node.checkboxGroup,
-              selector = `input[type='checkbox'][name='${groupName}']`;
-              
-        let checkboxes;      
-        
-        if (element.form) {
-            checkboxes = element.form.querySelectorAll(selector);
-        } else {
-            checkboxes = document.querySelectorAll(selector);
-        }
 
-        element.addEventListener(node.event, this);
-        checkboxes.forEach(checkbox => checkbox.addEventListener("change", this));
-        elementMap.set(element, this);
+        this._checkboxes = undefined;
         
-        this._checkboxes = checkboxes;
+        /* Initialize this checkbox group by
+           signalling an updated DOM tree. */
+        this.domUpdated();
+        
+        /* Add this feature as event handler to
+           the element of this feature.
+           Map the feature to its element in
+           the global element map. */
+        element.addEventListener(this.node.event, this);
+        featureMap.set(element, this);
     }
     
     get checkboxes() {
         return this._checkboxes;
     }
+    
+    domUpdated() {
+        /* This DOM tree has been updated.
+           The checkbox group needs an update.
+           Any removed checkbox does not need any
+           further consideration. Instead the           
+           checkbox group is freshly evaluated,
+           adding an event listener to every checkbox
+           new to the checkbox group. */
+        const {element, checkboxGroup} = this.node,
+              selector = `input[type='checkbox'][name='${checkboxGroup}']`;
+        let checkboxes;
+        
+        if (element.form) {
+            /* The element of thdis feature is part of a form.
+               Consider each matching checkbox of the form */
+            checkboxes = element.form.querySelectorAll(selector);
+        } else {
+            /* The element of this feature is not part of a
+               form. The whole document is considered. */
+            checkboxes = updatedElement.querySelectorAll(selector);
+        }
+
+        /* Add an event listener with this feature as handler
+           to every checkbox. The call will have no effect, if
+           the event listener already exists. */
+        checkboxes.forEach(checkbox => checkbox.addEventListener("change", this));
+        
+        this._checkboxes = checkboxes;
+   }
     
     destroy() {
         this.checkboxes.forEach(checkbox => checkbox.removeEventListener("change", this));
@@ -941,7 +971,7 @@ class ActionCall extends ServerInteractionFeature {
         super(element);
         
         this.node.element.addEventListener(this.node.event, this);
-        elementMap.set(element, this);
+        featureMap.set(element, this);
     }
     
     addObservers() {
@@ -949,7 +979,7 @@ class ActionCall extends ServerInteractionFeature {
         
         if (observers) {
             document.querySelectorAll(observers).forEach(observerElement => {
-                const feature = elementMap.get(observerElement);
+                const feature = featureMap.get(observerElement);
                 
                 if (feature) {
                     feature.startObserving(element, ["enliwfen.action.before", "enliwfen.action.done"]);
@@ -1017,7 +1047,7 @@ class Component extends ServerInteractionFeature {
             this.callServer();
         } else if (interval) {
             this._intervalID = setInterval(() => this.callServer({eventBefore: "update.before", eventAfter: "update.done"}), interval);
-            elementMap.set(element, this);
+            featureMap.set(element, this);
         } else if (node.event) {
             const eventSource = EventSourceMap.get(node);
             
@@ -1026,9 +1056,9 @@ class Component extends ServerInteractionFeature {
                 this._eventSource = eventSource;
             }
 
-            elementMap.set(element, this);
+            featureMap.set(element, this);
         } else {
-            elementMap.set(element, this);
+            featureMap.set(element, this);
         }
     }
     
@@ -1087,7 +1117,7 @@ class Form extends ServerInteractionFeature {
             element.addEventListener(node.event, this);
         }
         
-        elementMap.set(element, this);
+        featureMap.set(element, this);
     }
 
     addObservers() {
@@ -1095,7 +1125,7 @@ class Form extends ServerInteractionFeature {
         
         if (observers) {
             document.querySelectorAll(observers).forEach(observerElement => {
-                const feature = elementMap.get(observerElement);
+                const feature = featureMap.get(observerElement);
                 
                 if (feature) {
                     feature.startObserving(element, ["enliwfen.submission.before", "enliwfen.submission.after"]);
@@ -1173,7 +1203,7 @@ class FeatureFactory {
     }
     
     static createFeature(element) {
-        if (! elementMap.has(element)) {
+        if (! featureMap.has(element)) {
             switch (element.tagName) {
                 case "A":
                 case "BUTTON":
@@ -1204,7 +1234,7 @@ class FeatureFactory {
     }
     
     static destroyFeature(element) {
-        const feature = elementMap.get(element);
+        const feature = featureMap.get(element);
         
         if (feature !== undefined) {
             feature.destroy();
@@ -1216,7 +1246,7 @@ class FeatureFactory {
             this.createFeature(element);
         }
         
-        elementMap.values().forEach(feature => feature.addObservers())
+        featureMap.forEach(feature => feature.addObservers())
     }
 }
 
