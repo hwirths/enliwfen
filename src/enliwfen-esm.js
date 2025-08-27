@@ -476,13 +476,13 @@ class DOMHelper {
 
         /* Configure the error page and set the data */        
         errorPage.setAttribute("sandbox", "");        
-        errorPage.setAttribute("style", "width: 100%; height: 100%")
+        errorPage.setAttribute("style", "width: 100%; height: calc(100% - 3rem); margin-top: 1rem")
         errorPage.setAttribute("srcdoc", data);
         
         /* Configure the close button */
         closeButton.appendChild(document.createTextNode("X"));
         closeButton.setAttribute("autofocus", "");
-        closeButton.setAttribute("style", "display: block; width: 2rem; border: 0; float: right; font-size: 2rem;");
+        closeButton.setAttribute("style", "display: block; width: 2rem; height: 2rem; float: right; font-size: 1rem;");
         
         /* On click close the error dialog */
         closeButton.addEventListener("click", () => errorDialog.close());
@@ -704,7 +704,21 @@ class Endpoint {
                 break;
                 
             case "text/html":
-                DOMHelper.merge(target, await response.text());
+                /* In case of a failed call the returned text
+                   can either en entire HTML document or a 
+                   document fragment.
+                   Given an enitre HTML document, it will be
+                   displayed as an error.
+                   Given a document fragment, it will be handled
+                   like a document fragment returned by a
+                   successful call. */
+                const text = (await response.text()).trimStart();
+                
+                if (text.startsWith("<!DOCTYPE") || text.startsWith("<!doctype") || text.startsWith("<html")) {
+                    DOMHelper.showError(text);
+                } else {
+                    DOMHelper.merge(target, text);
+                }
                 break;
                 
             default:
@@ -737,7 +751,7 @@ class Endpoint {
                 /* An internal server error is expected
                    to return some information on the cause
                    of the error. Within the context of enliwfen
-                   the reurned information is handled like the
+                   the returned information is handled like the
                    returned data of a successful request. It
                    will be inserted / merged into the document
                    as specified by the feature node. */
