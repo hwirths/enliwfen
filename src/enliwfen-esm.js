@@ -806,8 +806,15 @@ class Endpoint {
                 break;
         }
 
-        element.inert = true;    
-        await this.fetched(await fetch(url, requestOptions));
+        element.inert = true;
+        
+        try {
+            await this.fetched(await fetch(url, requestOptions));
+        } catch (error) {
+            console.error(error);
+            DOMHelper.showError(`<html><body><h1>Unexpected error</h1><p>${error}</p></body></html>`)
+        }
+        
         element.inert = false;
     }
 
@@ -831,11 +838,13 @@ class ToggleAction extends Feature {
     trigger() {
         const {toggleAttribute, toggleClass, targets} = this.node;
 
-        if (toggleAttribute) {
-            targets.forEach(target => target.toggleAttribute(toggleAttribute));
-        } else if (toggleClass) {
+        if (toggleClass) {
             targets.forEach(target => target.classList.toggle(toggleClass));
         }
+        if (toggleAttribute) {
+            targets.forEach(target => target.toggleAttribute(toggleAttribute));
+        }
+        
     }
     
     handleEvent(event) {
