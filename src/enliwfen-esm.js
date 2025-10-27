@@ -134,6 +134,28 @@ class FeatureNode {
     }
     
     /*
+     Delivers the timeout value in milliseconds
+     to be used in a fetch call. If not set the
+     default value of 30000 milliseconds will
+     be used. 
+     */
+    get timeout() {
+        if (this._timeout === undefined) {
+            const enliwfenTimeout = this.dataset.enliwfenTimeout;
+            
+            if (enliwfenTimeout) {
+                const timeout = parseInt(enliwfenTimeout);
+                
+                this._timeout = timeout != NaN ? Math.max(0, timeout) : 30000;
+            } else {
+                this._timeout = 30000;
+            }
+        }
+        
+        return this._timeout
+    }
+    
+    /*
      Delivers the target of the feature defined by
      this node. This may be the element addressed
      to take the resul of an AJAX reqeuest or an action
@@ -274,7 +296,7 @@ class FeatureNode {
     get interval() {
         const interval = this.dataset.enliwfenInterval;
         
-        return interval ? interval : null;
+        return interval ? parseInt(interval) : null;
     }
     
     get deferred() {
@@ -318,6 +340,11 @@ class Feature {
     get node() {
         return this._node;
     }
+
+    handleEvent(event) {
+        console.log(`Received event '${event.type}'.`)
+    }
+    
         
     startObserving(element, events) {
         events.forEach(event => element.addEventListener(event, this));    
@@ -356,9 +383,9 @@ class Feature {
         
         this.removeObservers();
         
-        this._observations.entries().forEach(entry => {
-            entry[0].removeEventListener(entry[1], this);    
-        });
+        for (const entry of this._observations.entries()) {
+            entry[1].forEach(event => entry[0].removeEventListener(event, this));
+        }
         this._observations.clear();
         
         element.removeEventListener(event, this);
@@ -780,11 +807,19 @@ class Endpoint {
      * @param node An instance of class FeatureNode
      */
     async call() {
-        const {element, url, method, headers} = this.node,
+        const {element, url, method, headers, timeout} = this.node,
               requestOptions = {method: method};
+              
         
         if (headers) {
             requestOptions.headers = headers;
+        }
+        
+        if (timeout > 0) {
+            console.debug(`A timeout of '${timeout}ms' is going to be set for call of '${url}'.`)
+            requestOptions.signal = AbortSignal.timeout(timeout);
+        } else {
+            console.debug(`No timeout ist set for call of '${url}'.`)
         }
         
         switch(element.tagName) {
@@ -812,10 +847,10 @@ class Endpoint {
             await this.fetched(await fetch(url, requestOptions));
         } catch (error) {
             console.error(error);
-            DOMHelper.showError(`<html><body><h1>Unexpected error</h1><p>${error}</p></body></html>`)
+            DOMHelper.showError(`<html><body><h1>An unexpected error occured.</h1><p>Details: ${error}</p></body></html>`)
+        } finally {
+            element.inert = false;
         }
-        
-        element.inert = false;
     }
 
 }
@@ -910,7 +945,7 @@ class CheckboxGroup extends Feature {
         } else {
             /* The element of this feature is not part of a
                form. The whole document is considered. */
-            checkboxes = updatedElement.querySelectorAll(selector);
+            checkboxes = document.querySelectorAll(selector);
         }
 
         /* Add an event listener with this feature as handler
@@ -1053,7 +1088,7 @@ class EventSourceMap {
         return eventSource;
     }
     
-    find(node) {
+    static find(node) {
         return this._eventSources.get(node.eventSource);
     }
 }
