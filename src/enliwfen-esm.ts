@@ -157,10 +157,6 @@ class FeatureNode {
         if (this._method === undefined) {
             const element = this._element;
             
-            if (element instanceof HTMLFormElement) {
-                return element.formMethod || element.dataset.enliwfenMethod || "GET";
-                
-            }
             switch(element.tagName) {
                 case "FORM":
                     return this.deferred ? "GET" : (element as HTMLFormElement).method
