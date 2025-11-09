@@ -844,6 +844,7 @@ class Component extends ServerInteractionFeature {
         else if (node.event) {
             const eventSource = EventSourceMap.get(node);
             if (eventSource) {
+                console.debug(`Component is going to listen on event '${node.event}' at the event source '${node.eventSource}'.`);
                 eventSource.addEventListener(node.event, this);
                 this._eventSource = eventSource;
             }
@@ -1171,6 +1172,7 @@ class FeatureFactory {
         this.domAgent = new DOMAgent(this);
     }
     createFeature(element) {
+        console.debug(`Going to create feature for element '${element.tagName}#${element.id}'`);
         if (!Feature.get(element)) {
             switch (element.tagName) {
                 case "A":

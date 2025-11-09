@@ -1060,6 +1060,7 @@ class Component extends ServerInteractionFeature {
             const eventSource = EventSourceMap.get(node);
             
             if (eventSource) {
+                console.debug(`Component is going to listen on event '${node.event}' at the event source '${node.eventSource}'.`);
                 eventSource.addEventListener(node.event, this);
                 this._eventSource = eventSource;
             }
@@ -1448,6 +1449,8 @@ class FeatureFactory implements FeatureFactoryInterface {
     }
     
     createFeature(this: FeatureFactory, element: HTMLElement) {
+        console.debug(`Going to create feature for element '${element.tagName}#${element.id}'`);
+        
         if (! Feature.get(element)) {
             switch (element.tagName) {
                 case "A":
