@@ -805,21 +805,33 @@ class EventSourceMap {
         if (url) {
             let eventSources = this._eventSources;
             if (eventSources === undefined) {
-                eventSource = new EventSource(url);
                 this._eventSources = eventSources = new Map();
-                eventSources.set(url, eventSource);
             }
             else {
                 eventSource = eventSources.get(url);
-                if (eventSource === undefined) {
-                    eventSource = new EventSource(url);
-                    eventSources.set(url, eventSource);
-                }
             }
-            eventSource.addEventListener("error", (event) => {
-                console.error(event);
-                eventSources.delete(url);
-            });
+            if (eventSource === undefined) {
+                /* A new event source is created. */
+                eventSource = new EventSource(url);
+                /* Errors are logged.
+                   TODO: It might be a regular connection loss,
+                         which can be fixed by a reconnect.
+                         It might be an irrversible error and
+                         a reconnect is known to not work.
+                         Should an irreversible error be shown
+                         within an error dialog? */
+                eventSource.addEventListener("error", (event) => {
+                    console.error(event);
+                    /* eventSources.delete(url); */
+                });
+                /* The sepcial event 'reset-content' corresponds
+                   to the HTTP 205 response code and is intended
+                   to trigger a location reload. */
+                eventSource.addEventListener("reset-content", () => location.reload());
+                /* The new event source is added to the map
+                   of event soruces. */
+                eventSources.set(url, eventSource);
+            }
         }
         return eventSource;
     }
