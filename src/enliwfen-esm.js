@@ -357,7 +357,7 @@ class Feature {
         return this._node;
     }
     handleEvent(event) {
-        console.debug(`Received event '${event.type}'.`);
+        console.debug(`Feature.handleEvent() [${this.node}] - Received event '${event.type}'.`);
     }
     domUpdate() { }
     observerUpdate(updateDetail) {
@@ -479,7 +479,7 @@ class Endpoint {
                                         this.domAgent.mergeJson(jsonUpdate, this.node);
                                     }
                                     catch (error) {
-                                        console.warn(`Error parsing expected JSON string : ${error}`);
+                                        console.warn(`Endpoint.succeeded() [${this.node}] - Error parsing expected JSON string : ${error}`);
                                     }
                                 }
                                 else {
@@ -520,7 +520,7 @@ class Endpoint {
                 }
             }
             catch (error) {
-                console.error(`Failed to read the stream from ${this.node.url} ({error})`);
+                console.error(`Endpoint.succeeded() [${this.node}] - Failed to read the stream from ${this.node.url} ({error})`);
             }
         } /* endif (response.headers.has("Content-Length")) */
     }
@@ -599,11 +599,11 @@ class Endpoint {
                 requestOptions.headers = headers;
             }
             if (timeout > 0) {
-                console.debug(`A timeout of '${timeout}ms' is going to be set for call of '${url}'.`);
+                console.debug(`Endpoint.call() [${this.node}] - A timeout of '${timeout}ms' is going to be set for call of '${url}'.`);
                 requestOptions.signal = AbortSignal.timeout(timeout);
             }
             else {
-                console.debug(`No timeout ist set for call of '${url}'.`);
+                console.debug(`Endpoint.call() [${this.node}] - No timeout ist set for call of '${url}'.`);
             }
             switch (element.tagName) {
                 case "FORM":
@@ -636,7 +636,7 @@ class Endpoint {
             }
         }
         else {
-            console.log(`No URL to call ist set in the feature node '${element}'.`);
+            console.log(`Endpoint.call() [${this.node}] - No URL to call ist set in the feature node '${element}'.`);
         }
     }
 }
@@ -683,7 +683,7 @@ class ToggleAction extends Feature {
             element.addEventListener(this.node.event, this);
         }
         else {
-            console.log(`No event of interest set for the toggle action '${element}'.`);
+            console.log(`ToggleAction.constructor() [${this.node}] - No event of interest set for the toggle action '${element}'.`);
         }
     }
     trigger() {
@@ -738,7 +738,7 @@ class CheckboxGroup extends Feature {
             element.addEventListener(this.node.event, this);
         }
         else {
-            console.log(`No event of interest set for teh checkbox group '${element}'`);
+            console.log(`CheckboxGroup.constructor() [${this.node}] - No event of interest set for teh checkbox group '${element}'`);
         }
     }
     get checkboxes() {
@@ -824,7 +824,7 @@ class ActionCall extends ServerInteractionFeature {
             this.node.element.addEventListener(this.node.event, this);
         }
         else {
-            console.log(`There is no event of insterest set for the action call '${element}'.`);
+            console.log(`ActionCall.constructor() [${this.node}] - There is no event of insterest set for the action call '${element}'.`);
         }
     }
     handleEvent(event) {
@@ -868,7 +868,7 @@ class EventSourceMap {
                 /* The special event 'keepalive' is intended
                    to check aliveness of the connection.
                    For debug purposes the event is logged. */
-                eventSource.addEventListener("keepalive", () => console.debug(`Event 'keepalive' received on event source '${url}'.`));
+                eventSource.addEventListener("keepalive", () => console.debug(`EventSourceMap.get() [${url}] - Event 'keepalive' received on event source '${url}'.`));
                 /* The new event source is added to the map
                    of event soruces. */
                 eventSources.set(url, eventSource);
@@ -897,7 +897,7 @@ class Component extends ServerInteractionFeature {
         else if (node.event) {
             const eventSource = EventSourceMap.get(node);
             if (eventSource) {
-                console.debug(`Component is going to listen on event '${node.event}' at the event source '${node.eventSource}'.`);
+                console.debug(`Component.constructor() [${this.node}] - Component is going to listen on event '${node.event}' at the event source '${node.eventSource}'.`);
                 eventSource.addEventListener(node.event, this);
                 this._eventSource = eventSource;
             }
@@ -918,7 +918,7 @@ class Component extends ServerInteractionFeature {
     observerUpdate(updateDetail) {
         if (updateDetail.startsWith("enliwfen")) {
             if (updateDetail.endsWith(".after") || updateDetail.endsWith(".done")) {
-                console.debug(`Got observer update ${updateDetail}. Component will be updated.`);
+                console.debug(`Component.observerUpdate() [${this.node}] - Got observer update ${updateDetail}. Component will be updated.`);
                 this.callServer({ eventBefore: "update.before", eventAfter: "update.done" });
             }
             else {
@@ -932,17 +932,17 @@ class Component extends ServerInteractionFeature {
     handleEvent(event) {
         if (event.type === this.node.event) {
             if (event instanceof MessageEvent && event.data) {
-                console.debug(`Got event data ${event.data}.`);
+                console.debug(`Component.handleEvetn [${this.node}] - Got event data ${event.data}.`);
                 try {
                     const jsonUpdates = JSON.parse(event.data);
                     this.domAgent.mergeJson(jsonUpdates, this.node);
                 }
                 catch (error) {
-                    console.warn(`Error parsing expected JSON string : ${error}`);
+                    console.warn(`Component.handleEvent() [${this.node}] - Error parsing expected JSON string : ${error}`);
                 }
             }
             else {
-                console.debug(`Got event ${this.node.event}. Component will be updated.`);
+                console.debug(`Component.handleEvent() [${this.node}] - Got event ${this.node.event}. Component will be updated.`);
                 this.callServer({ eventBefore: "update.before", eventAfter: "update.done" });
             }
         }
@@ -951,7 +951,7 @@ class Component extends ServerInteractionFeature {
             /* TODO: Adding a component itsel to the observers list may leed to an
                      inifinite loop of updates!
                      As well there are chances of circular observer chains. */
-            console.debug(`Got event '{event.type}'. Component will be updated.`);
+            console.debug(`Component.handleEvent() [${this.node}] - Got event '{event.type}'. Component will be updated.`);
             this.callServer({ eventBefore: "update.before", eventAfter: "update.done" });
         }
     }
@@ -995,11 +995,11 @@ class Datalist extends Feature {
                 element.addEventListener(this.node.event, this);
             }
             else {
-                console.log(`No datalist element with id '${datalistId}' given for feature node '${element}'.`);
+                console.log(`Datalist.constructor() [${this.node}] - No datalist element with id '${datalistId}' given for feature node '${element}'.`);
             }
         }
         else {
-            console.log(`There is no event defined for feature node '${element}'.`);
+            console.log(`Datalist.constructor() [${this.node}] - There is no event defined for feature node '${element}'.`);
         }
     }
     handleEvent(event) {
@@ -1021,7 +1021,7 @@ class Datalist extends Feature {
                 }
             }
             else {
-                console.log(`There is no filter pattern given in the feature node '${element}' for datalist updates.`);
+                console.log(`Datalist.handleEvent() [${this.node}] - There is no filter pattern given in the feature node '${element}' for datalist updates.`);
             }
         }
     }
@@ -1077,7 +1077,7 @@ class DOMAgent {
         DOMAgent.openDialog(errorPage);
     }
     replaceElement(target, update) {
-        console.debug(`New HTML element '${update.tagName}#${update.id}' is going to replace the corresponding HTML element of the document.`);
+        console.debug(`DOMAgent.replaceElement() - New HTML element '${update.tagName}#${update.id}' is going to replace the corresponding HTML element of the document.`);
         const featureFactory = this.featureFactory;
         /* Destroy all features of the target subtree. */
         for (const feature of Feature.features(target)) {
@@ -1106,12 +1106,12 @@ class DOMAgent {
                     this.replaceElement(target, update);
                 }
                 else {
-                    console.log(`New HTML element '${update.tagName}#${update.id}' is going to be appended to the body.`);
+                    console.log(`DOMAgent.mergeHtml() - New HTML element '${update.tagName}#${update.id}' is going to be appended to the body.`);
                     document.body.appendChild(update);
                 }
             }
             else {
-                console.log(`New element '${update.tagName}#${update.id}' is appended to the body.`);
+                console.log(`DOMAgent.mergeHtml() - New element '${update.tagName}#${update.id}' is appended to the body.`);
                 document.body.appendChild(update);
             }
         }
@@ -1231,7 +1231,7 @@ class FeatureFactory {
         this.domAgent = new DOMAgent(this);
     }
     createFeature(element) {
-        console.debug(`Going to create feature for element '${element.tagName}#${element.id}'`);
+        console.debug(`FeatureFactory.createFeature() - Going to create feature for element '${element.tagName}#${element.id}'`);
         if (!Feature.get(element)) {
             switch (element.tagName) {
                 case "A":
