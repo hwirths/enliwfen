@@ -1138,6 +1138,18 @@ class Component extends ServerInteractionFeature {
         super.destroy()
     }
     
+    observerUpdate(updateDetail: string) {
+        if (updateDetail.startsWith("enliwfen")) {
+            if (updateDetail.endsWith(".after") || updateDetail.endsWith(".done")) {
+                console.debug(`Got observer update ${updateDetail}. Component will be updated.`);
+                this.callServer({eventBefore: "update.before", eventAfter: "update.done"});
+            } else {
+                super.observerUpdate(updateDetail);
+            }
+        } else {
+            super.observerUpdate(updateDetail);
+        }
+    }
     handleEvent(event: Event) {
         if (event.type === this.node.event) {
             if (event instanceof MessageEvent && event.data) {
