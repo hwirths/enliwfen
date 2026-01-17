@@ -14,30 +14,34 @@ class DOMQuery {
             : scope.querySelector(selectors);
         return queryResult instanceof HTMLElement ? queryResult : null;
     }
-    static selectAll(selectors, scope = null) {
-        const resultList = [], queryResult = scope === null ?
+    static *queryAll(selectors, scope = null) {
+        const queryResult = (scope === null) ?
             document.querySelectorAll(selectors)
             : scope.querySelectorAll(selectors);
-        for (const entry of queryResult) {
-            if (entry instanceof HTMLElement) {
-                resultList.push(entry);
+        for (const element of queryResult) {
+            if (element instanceof HTMLElement) {
+                yield element;
             }
         }
-        return resultList;
     }
-    static getFeatureElements(scope = null) {
-        const resultList = [], queryResult = scope === null ?
+    static selectAll(selectors, scope = null) {
+        return [...DOMQuery.queryAll(selectors, scope)];
+    }
+    static *featureElements(scope = null) {
+        const queryResult = (scope === null) ?
             document.getElementsByClassName(enliwfen)
             : scope.getElementsByClassName(enliwfen);
-        if ((scope !== null) && (scope.classList.contains(enliwfen))) {
-            resultList.push(scope);
+        if ((scope !== null) && scope.classList.contains(enliwfen)) {
+            yield scope;
         }
-        for (const entry of queryResult) {
-            if (entry instanceof HTMLElement) {
-                resultList.push(entry);
+        for (const element of queryResult) {
+            if (element instanceof HTMLElement) {
+                yield element;
             }
         }
-        return resultList;
+    }
+    static getFeatureElements(scope = null) {
+        return [...DOMQuery.featureElements(scope)];
     }
 }
 /*
@@ -157,7 +161,7 @@ class FeatureNode {
             const enliwfenTimeout = this.dataset.enliwfenTimeout;
             if (enliwfenTimeout) {
                 const timeout = parseInt(enliwfenTimeout);
-                this._timeout = timeout != NaN ? Math.max(0, timeout) : 30000;
+                this._timeout = !Number.isNaN(timeout) ? Math.max(0, timeout) : 30000;
             }
             else {
                 this._timeout = 30000;
@@ -315,10 +319,12 @@ class FeatureNode {
     dispatchEvent(eventType) {
         this.element.dispatchEvent(new CustomEvent(eventType));
     }
+    toString() {
+        return `${this.element.tagName}[${this.element.id}]`;
+    }
 }
 class Feature {
     constructor(element) {
-        this._observations = new Map();
         this._node = new FeatureNode(element);
         Feature._map.set(element, this);
     }
@@ -328,45 +334,45 @@ class Feature {
     static forEach(callbackFunction) {
         Feature._map.forEach(callbackFunction);
     }
+    static *queryAll(selectors, scope = null) {
+        const queryResult = (scope === null) ?
+            document.querySelectorAll(selectors)
+            : scope.querySelectorAll(selectors);
+        for (const element of DOMQuery.queryAll(selectors, scope)) {
+            const feature = Feature._map.get(element);
+            if (feature !== undefined) {
+                yield feature;
+            }
+        }
+    }
+    static *features(scope = null) {
+        for (const featureElement of DOMQuery.featureElements(scope)) {
+            const feature = Feature._map.get(featureElement);
+            if (feature !== undefined) {
+                yield feature;
+            }
+        }
+    }
     get node() {
         return this._node;
     }
     handleEvent(event) {
-        console.log(`Received event '${event.type}'.`);
+        console.debug(`Received event '${event.type}'.`);
     }
-    startObserving(element, events) {
-        events.forEach(event => element.addEventListener(event, this));
-        this._observations.set(element, events);
+    domUpdate() { }
+    observerUpdate(updateDetail) {
+        console.debug(`Feature.observerUpdate() [${this.node}] - Received update detail '${updateDetail}'.`);
     }
-    stopObserving(element) {
-        const events = this._observations.get(element);
-        if (events) {
-            events.forEach(event => element.removeEventListener(event, this));
-            this._observations.delete(element);
+    notifyObservers(updateDetail) {
+        const observers = this.node.observers;
+        if (observers !== null) {
+            for (const feature of Feature.queryAll(observers)) {
+                feature.observerUpdate(updateDetail);
+            }
         }
     }
-    addObservers() { }
-    removeObservers() {
-        const { element, observers } = this.node;
-        if (observers) {
-            document.querySelectorAll(observers).forEach(observerElement => {
-                if (observerElement instanceof HTMLElement) {
-                    const feature = Feature.get(observerElement);
-                    if (feature) {
-                        feature.stopObserving(element);
-                    }
-                }
-            });
-        }
-    }
-    domUpdated() { }
     destroy() {
         const { element, event } = this.node;
-        this.removeObservers();
-        for (const entry of this._observations.entries()) {
-            entry[1].forEach(event => entry[0].removeEventListener(event, this));
-        }
-        this._observations.clear();
         if (event) {
             element.removeEventListener(event, this);
         }
@@ -375,13 +381,6 @@ class Feature {
 }
 Feature._map = new Map();
 class Endpoint {
-    /*
-     * @param node An instance of class FeatureNode
-     */
-    constructor(node, domAgent) {
-        this.node = node;
-        this.domAgent = domAgent;
-    }
     static getMimeType(response) {
         const contentType = response.headers.get("Content-Type");
         if (contentType !== null) {
@@ -396,6 +395,13 @@ class Endpoint {
                 : contentType.substring(0, parameterIndex);
         }
         return contentType;
+    }
+    /*
+     * @param node An instance of class FeatureNode
+     */
+    constructor(node, domAgent) {
+        this.node = node;
+        this.domAgent = domAgent;
     }
     async succeeded(response) {
         const mimeType = Endpoint.getMimeType(response);
@@ -418,24 +424,23 @@ class Endpoint {
                     break;
                 case "application/pdf":
                 case "application/zip":
-                    const content = await response.blob(), contentURL = URL.createObjectURL(content), link = document.createElement("a"), headers = response.headers;
-                    let filename;
+                    const headers = response.headers;
                     if (headers.has("Content-Disposition")) {
-                        const filenames = headers.get("Content-Disposition").split(";").filter(e => e.trimStart().startsWith("filename"));
-                        if (filenames.length) {
-                            filename = filenames[0].split("=")[1].replaceAll("\"", "").trim();
+                        const filenames = headers.get("Content-Disposition")?.split(";").filter(e => e.trimStart().startsWith("filename"));
+                        if ((filenames !== undefined) && filenames.length) {
+                            const content = await response.blob(), contentURL = URL.createObjectURL(content), link = document.createElement("a"), filename = filenames[0].split("=")[1].replaceAll("\"", "").trim();
+                            link.href = contentURL;
+                            link.download = filename;
+                            link.click();
+                            URL.revokeObjectURL(contentURL);
                         }
                     }
-                    link.href = contentURL;
-                    link.download = filename;
-                    link.click();
-                    URL.revokeObjectURL(contentURL);
                     break;
                 default:
                     this.domAgent.createError(response);
             }
         }
-        else {
+        else if (response.body !== null) {
             const utf8Decoder = new TextDecoder("utf-8"), updateStart = "\n:enliwfen_update_start:\n", updateEnd = "\n:enliwfen_update_end:\n", streamProtocolIdentifier = ":enliwfen_stream_protocol:\n", jsonIdentifier = ":json:";
             let enliwfenStreamProtocol, currentUpdate, remainingText = "";
             try {
@@ -635,9 +640,45 @@ class Endpoint {
         }
     }
 }
+class ActionIndicator extends Feature {
+    constructor(element) {
+        super(element);
+        this._enabled = 0;
+        element.hidden = true;
+    }
+    show() {
+        this.node.element.hidden = false;
+    }
+    hide() {
+        this.node.element.hidden = true;
+    }
+    observerUpdate(updateDetail) {
+        if (updateDetail.startsWith("enliwfen.")) {
+            if (updateDetail.endsWith(".before")) {
+                if (this._enabled === 0) {
+                    this.show();
+                }
+                this._enabled += 1;
+            }
+            else if (updateDetail.endsWith(".done") || updateDetail.endsWith(".after")) {
+                this._enabled -= 1;
+                if (this._enabled === 0) {
+                    this.hide();
+                }
+            }
+            else {
+                super.observerUpdate(updateDetail);
+            }
+        }
+        else {
+            super.observerUpdate(updateDetail);
+        }
+    }
+}
 class ToggleAction extends Feature {
     constructor(element) {
         super(element);
+        this._open = 0;
         if (this.node.event !== null) {
             element.addEventListener(this.node.event, this);
         }
@@ -652,6 +693,14 @@ class ToggleAction extends Feature {
         }
         if (toggleAttribute) {
             targets.forEach(target => target.toggleAttribute(toggleAttribute));
+        }
+    }
+    observerUpdate(updateDetail) {
+        if (updateDetail === "enliwfen.toggle") {
+            this.trigger();
+        }
+        else {
+            super.observerUpdate(updateDetail);
         }
     }
     handleEvent(event) {
@@ -680,7 +729,7 @@ class CheckboxGroup extends Feature {
         this._checkboxes = undefined;
         /* Initialize this checkbox group by
            signalling an updated DOM tree. */
-        this.domUpdated();
+        this.domUpdate();
         /* Add this feature as event handler to
            the element of this feature.
            Map the feature to its element in
@@ -695,7 +744,7 @@ class CheckboxGroup extends Feature {
     get checkboxes() {
         return this._checkboxes;
     }
-    domUpdated() {
+    domUpdate() {
         /* This DOM tree has been updated.
            The checkbox group needs an update.
            Any removed checkbox does not need any
@@ -722,14 +771,14 @@ class CheckboxGroup extends Feature {
         this._checkboxes = checkboxes;
     }
     destroy() {
-        this.checkboxes.forEach(checkbox => checkbox.removeEventListener("change", this));
+        this.checkboxes?.forEach(checkbox => checkbox.removeEventListener("change", this));
         super.destroy();
     }
     handleEvent(event) {
         const element = this.node.element, currentTarget = event.currentTarget;
         if (currentTarget === element && event.type === this.node.event) {
             const newStatus = element.checked;
-            this.checkboxes.forEach(checkbox => checkbox.checked = newStatus);
+            this.checkboxes?.forEach(checkbox => checkbox.checked = newStatus);
         }
         else if (currentTarget !== element && event.type === "change") {
             if (!currentTarget.checked && element.checked) {
@@ -757,13 +806,14 @@ class ServerInteractionFeature extends Feature {
         this.endpoint = new Endpoint(this.node, domAgent);
     }
     async callServer({ eventBefore, eventAfter }) {
-        const node = this.node;
         if (eventBefore) {
-            node.dispatchEvent(`enliwfen.${eventBefore}`);
+            this.node.dispatchEvent(`enliwfen.${eventBefore}`);
+            this.notifyObservers(`enliwfen.${eventBefore}`);
         }
         await this.endpoint.call();
         if (eventAfter) {
-            node.dispatchEvent(`enliwfen.${eventAfter}`);
+            this.notifyObservers(`enliwfen.${eventAfter}`);
+            this.node.dispatchEvent(`enliwfen.${eventAfter}`);
         }
     }
 }
@@ -775,19 +825,6 @@ class ActionCall extends ServerInteractionFeature {
         }
         else {
             console.log(`There is no event of insterest set for the action call '${element}'.`);
-        }
-    }
-    addObservers() {
-        const { element, observers } = this.node;
-        if (observers) {
-            document.querySelectorAll(observers).forEach(observerElement => {
-                if (observerElement instanceof HTMLElement) {
-                    const feature = Feature.get(observerElement);
-                    if (feature) {
-                        feature.startObserving(element, ["enliwfen.action.before", "enliwfen.action.done"]);
-                    }
-                }
-            });
         }
     }
     handleEvent(event) {
@@ -828,6 +865,10 @@ class EventSourceMap {
                    to the HTTP 205 response code and is intended
                    to trigger a location reload. */
                 eventSource.addEventListener("reset-content", () => location.reload());
+                /* The special event 'keepalive' is intended
+                   to check aliveness of the connection.
+                   For debug purposes the event is logged. */
+                eventSource.addEventListener("keepalive", () => console.debug(`Event 'keepalive' received on event source '${url}'.`));
                 /* The new event source is added to the map
                    of event soruces. */
                 eventSources.set(url, eventSource);
@@ -912,17 +953,6 @@ class Form extends ServerInteractionFeature {
             element.addEventListener(node.event, this);
         }
     }
-    addObservers() {
-        const { element, observers } = this.node;
-        if (observers) {
-            document.querySelectorAll(observers).forEach(observerElement => {
-                const feature = Feature.get(observerElement);
-                if (feature) {
-                    feature.startObserving(element, ["enliwfen.submission.before", "enliwfen.submission.after"]);
-                }
-            });
-        }
-    }
     handleEvent(event) {
         if (event.type === this.node.event) {
             event.preventDefault();
@@ -989,6 +1019,14 @@ class DOMAgent {
         this.featureFactory = featureFactory;
         this.parser = new DOMParser();
     }
+    static dispatchEvent(scope, event) {
+        if (scope.classList.contains(enliwfen)) {
+            scope.dispatchEvent(event);
+        }
+        for (const element of scope.getElementsByClassName(enliwfen)) {
+            element.dispatchEvent(event);
+        }
+    }
     static openDialog(element) {
         /* Create the elements used to build the error dialog
            and to present the error page. */
@@ -1025,21 +1063,22 @@ class DOMAgent {
         DOMAgent.openDialog(errorPage);
     }
     replaceElement(target, update) {
-        console.log(`New HTML element '${update.tagName}#${update.id}' is going to replace the corresponding HTML element of the document.`);
+        console.debug(`New HTML element '${update.tagName}#${update.id}' is going to replace the corresponding HTML element of the document.`);
+        const featureFactory = this.featureFactory;
         /* Destroy all features of the target subtree. */
-        DOMQuery.getFeatureElements(target).forEach(element => this.featureFactory.destroyFeature(element));
+        for (const feature of Feature.features(target)) {
+            feature.destroy();
+        }
         /* Replace target with the child. */
         target.replaceWith(update);
         /* Before creating the new features the existing ones
            are updated. */
-        Feature.forEach(feature => feature.domUpdated());
+        Feature.forEach(feature => feature.domUpdate());
         /* Now that the updates have been merged into the document
-           the collected feature nodes can be created.
-           After the features are created and therefore present
-           their observers can be initialized. */
-        const featureElements = DOMQuery.getFeatureElements(update);
-        featureElements.forEach(element => this.featureFactory.createFeature(element));
-        featureElements.forEach(element => { var _a; return (_a = Feature.get(element)) === null || _a === void 0 ? void 0 : _a.addObservers(); });
+           the collected feature nodes can be created. */
+        for (const featureElement of DOMQuery.featureElements(update)) {
+            featureFactory.createFeature(featureElement);
+        }
     }
     mergeHtml(htmlString, domTarget) {
         const updates = this.parser.parseFromString(htmlString, "text/html");
@@ -1047,7 +1086,7 @@ class DOMAgent {
             if (update instanceof HTMLElement) {
                 let target = document.getElementById(update.id);
                 if (target === null) {
-                    target = (domTarget === null || domTarget === void 0 ? void 0 : domTarget.element) || null;
+                    target = domTarget?.element || null;
                 }
                 if (target !== null) {
                     this.replaceElement(target, update);
@@ -1101,7 +1140,7 @@ class DOMAgent {
                document yet. */
             const updatedElement = morphdom(target, contents, {
                 onNodeAdded: (node) => {
-                    if (node.classList && node.classList.contains("enliwfen")) {
+                    if ((node instanceof HTMLElement) && node.classList.contains("enliwfen")) {
                         console.debug("Add node %o", node);
                         /* A feature node. Add it to the list of feature
                            nodes. They are created after finishing the merge. */
@@ -1114,14 +1153,14 @@ class DOMAgent {
                          * has a different ID or different 'enliwfen' settings. */
                         if (fromElement.id !== toElement.id) {
                             console.debug("Update needed due to different id! %o : %o", fromElement, toElement);
-                            FeatureFactory.destroyFeature(fromElement);
+                            FeatureFactory.instance.destroyFeature(fromElement);
                         }
                         else {
                             for (const attribute of fromElement.attributes) {
                                 if (attribute.name.startsWith("data-enliwfen")
                                     && attribute.value !== toElement.getAttribute(attribute.name)) {
                                     console.debug("Update needed due to different enliwfen settings! %o : %o", fromElement, toElement);
-                                    FeatureFactory.destroyFeature(fromElement);
+                                    FeatureFactory.instance.destroyFeature(fromElement);
                                     break;
                                 }
                             }
@@ -1129,7 +1168,7 @@ class DOMAgent {
                     }
                 },
                 onElUpdated: (element) => {
-                    if (element.classList.contains("enliwfen")) {
+                    if ((element instanceof HTMLElement) && element.classList.contains("enliwfen")) {
                         /* The element has been updated. Add the element
                            to the list of feature nodes. They are craeted
                            after finishing the merge. */
@@ -1139,24 +1178,18 @@ class DOMAgent {
                 onNodeDiscarded: (node) => {
                     if (node.classList && node.classList.contains("enliwfen")) {
                         console.debug("Remove node %o", node);
-                        FeatureFactory.destroyFeature(node);
+                        FeatureFactory.instance.destroyFeature(node);
                     }
                 }
             });
             /* Before creating the new features the existing ones
                are updated. */
-            Feature.forEach(feature => feature.domUpdated());
+            Feature.forEach(feature => feature.domUpdate());
             /* Now that the updates have been merged into the document
                the collected feature nodes can be created.
                After the features are created and therefore present
                their observers can be initialized. */
-            featureNodes.forEach(node => FeatureFactory.createFeature(node));
-            featureNodes.forEach(node => {
-                const feature = Feature.get(node);
-                if (feature) {
-                    feature.addObservers();
-                }
-            });
+            featureNodes.forEach(node => FeatureFactory.instance.createFeature(node));
         }
     }
     createError(response) {
@@ -1225,6 +1258,9 @@ class FeatureFactory {
         else if ("enliwfenEventsource" in dataset) {
             EventSourceMap.get(new FeatureNode(element));
         }
+        else if ("enliwfenActionIndicator" in dataset) {
+            new ActionIndicator(element);
+        }
     }
     destroyFeature(element) {
         const feature = Feature.get(element);
@@ -1233,8 +1269,9 @@ class FeatureFactory {
         }
     }
     createFeatures() {
-        DOMQuery.getFeatureElements().forEach(element => this.createFeature(element));
-        Feature.forEach(feature => feature.addObservers());
+        for (const featureElement of DOMQuery.featureElements()) {
+            this.createFeature(featureElement);
+        }
     }
 }
 FeatureFactory.instance = new FeatureFactory();
