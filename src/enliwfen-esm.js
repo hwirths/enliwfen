@@ -208,17 +208,15 @@ class FeatureNode {
     get targets() {
         if (this._targets === undefined) {
             const element = this._element;
-            let targets = [];
+            let targets;
             if (element.dataset.enliwfenTargets) {
-                const queryResult = document.querySelectorAll(element.dataset.enliwfenTargets);
-                for (const entry of queryResult) {
-                    if (entry instanceof HTMLElement) {
-                        targets.push(entry);
-                    }
+                targets = DOMQuery.selectAll(element.dataset.enliwfenTargets);
+                if (targets.length === 0) {
+                    targets.push(this.target);
                 }
             }
-            if (targets.length === 0) {
-                targets.push(this.target);
+            else {
+                targets = [this.target];
             }
             this._targets = targets;
         }
@@ -678,7 +676,6 @@ class ActionIndicator extends Feature {
 class ToggleAction extends Feature {
     constructor(element) {
         super(element);
-        this._open = 0;
         if (this.node.event !== null) {
             element.addEventListener(this.node.event, this);
         }
@@ -707,19 +704,8 @@ class ToggleAction extends Feature {
         if (event.type == this.node.event) {
             this.trigger();
         }
-        else if (event.type.startsWith("enliwfen.")) {
-            if (event.type.endsWith(".before")) {
-                if (this._open === 0) {
-                    this.trigger();
-                }
-                this._open += 1;
-            }
-            else if (event.type.endsWith(".done") || event.type.endsWith(".after")) {
-                this._open -= 1;
-                if (this._open === 0) {
-                    this.trigger();
-                }
-            }
+        else {
+            super.handleEvent(event);
         }
     }
 }
