@@ -1338,10 +1338,19 @@ class DOMAgent implements DOMAgentInterface {
     }
     
     mergeHtml(this: DOMAgent, htmlString: string, domTarget?: DOMTarget): void {
-        const updates = this.parser.parseFromString(htmlString, "text/html");
+        /* The HTML string is parsed into a new document. The children of the body
+           element are the updates to merge into the main document. The children
+           collection of the body element is live updated. Therefore looping over
+           the children collection and removing elements from it at the same time
+           is'nt a good idea. Therefore the children are referenced in a separate
+           list, which is then used to loop over the updates. */
+        const update_document = this.parser.parseFromString(htmlString, "text/html"),
+              updates = [...update_document.body.children];
         
-        for (const update of updates.body.children) {
+        for (const update of updates) {
             if (update instanceof HTMLElement) {
+                console.log(`DOMAgent.mergeHtml() - Going to merge the update '${update.tagName}[${update.id}]'.`)
+                
                 let target = document.getElementById(update.id);
                 
                 if (target === null) {
@@ -1349,7 +1358,11 @@ class DOMAgent implements DOMAgentInterface {
                 }
                 
                 if (target !== null) {
-                    this.replaceElement(target, update);
+                    try {
+                        this.replaceElement(target, update);
+                    } catch(error) {
+                        console.log(`DOMAgent.mergeHtml() - Error merging the update '${update.tagName}[${update.id}]' (${error}).`)
+                    }
                 } else {
                     console.log(`DOMAgent.mergeHtml() - New HTML element '${update.tagName}#${update.id}' is going to be appended to the body.`);
                     document.body.appendChild(update);
