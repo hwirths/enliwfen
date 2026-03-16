@@ -1233,9 +1233,16 @@ class FeatureFactory {
         if (!Feature.get(element)) {
             switch (element.tagName) {
                 case "A":
-                case "BUTTON":
                 case "SELECT":
                     new ActionCall(element, this.domAgent);
+                    break;
+                case "BUTTON":
+                    if ("enliwfenToggle" in element.dataset || "enliwfenToggleClass" in element.dataset) {
+                        new ToggleAction(element);
+                    }
+                    else {
+                        new ActionCall(element, this.domAgent);
+                    }
                     break;
                 case "FORM":
                     new Form(element, this.domAgent);
