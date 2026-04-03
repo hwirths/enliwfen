@@ -1,0 +1,29 @@
+{
+    "name": "enliwfen",
+    "version": "0.1.0",
+    "description": "A script to enliven web sites served by web frameworks like Django.",
+    "homepage": "https://github.com/hwirths/enliwfen",
+    "bugs": {
+        "url": "https://github.com/hwirths/enliwfen/issues"
+    },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/hwirths/enliwfen.git"
+    },
+    "dependencies": {
+        "dompurify": "^3.3.2",
+        "esm": "^3.2.25"
+    },
+    "private": true,
+    "main": "index.js",
+    "module": "main.js",
+    "directories": {
+        "doc": "docs"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": ""
+}

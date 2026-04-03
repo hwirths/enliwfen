@@ -2,3 +2,8 @@
 # Eclipse
 ###
 .project
+
+#######
+# Node
+###
+node_modules/**
