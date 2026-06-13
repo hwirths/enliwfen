@@ -9,6 +9,11 @@ import morphdom from "morphdom"
 const version = "0.1.0";
 const enliwfen = "enliwfen";
 
+const ENLIWFEN_HEADERS = {
+    REQUEST: "x-enlwifen-request",
+    RELOAD: "x-enliwfen-reload"
+};
+
 class DOMQuery {
     
     static selectFirst(selectors: string, scope: HTMLElement | null = null): HTMLElement | null {
@@ -748,10 +753,8 @@ class Endpoint {
               requestOptions = {method: method} as any;
               
         if (url !== undefined) {
-            if (headers) {
-                requestOptions.headers = headers;
-            }
-            
+            requestOptions.headers = Object.assign(headers || {}, {"x-enliwfen-request": "true"});
+
             if (timeout > 0) {
                 console.debug(`Endpoint.call() [${this.node}] - A timeout of '${timeout}ms' is going to be set for call of '${url}'.`)
                 requestOptions.signal = AbortSignal.timeout(timeout);
@@ -769,7 +772,7 @@ class Endpoint {
                 case "BUTTON":
                 case "INPUT":
                 case "SELECT":
-                    /* A request body with form data will be added, if the
+                    /* A request body with form data will be added, if
                        the element belongs to a form and the HTTP method
                        is set to 'post'. */
                     const form = (element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement).form

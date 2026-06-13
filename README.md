@@ -46,3 +46,24 @@ A simple example:
 ~~~
 
 The form handler is expected to deliver the form only, which then get's updated on the page. That's it for a simple Ajax - driven form.
+
+## DOM Agent
+
+### Request headers
+
+* "x-enliwfen-request": Marks the request as launched by enliwfen
+
+### Response headers
+
+* "x-enliwfen-reload": Reloads the entire page
+
+### Targeting updates
+
+Updates are primarily addressed to elements with an unique id.
+
+After parsing the response document each child of the body element is checked:
+
+* If the element has an id set, the corresponding element in the active document is looked up and replaced. Otherwise it is handled as if no id has been set.
+* If the element has no id set it replaces the element which triggered the load.
+* In any other case the new element is discarded.
+
