@@ -1340,7 +1340,11 @@ class DOMAgent implements DOMAgentInterface {
         }
     }
     
-    mergeHtml(this: DOMAgent, htmlString: string, domTarget?: DOMTarget): void {
+    private isTarget(this: DOMAgent, targetCandidate: HTMLElement, update: HTMLElement): boolean {
+        return false;
+    }
+
+    mergeHtml(this: DOMAgent, htmlString: string, sourceNode?: DOMTarget): void {
         /* The HTML string is parsed into a new document. The children of the body
            element are the updates to merge into the main document. The children
            collection of the body element is live updated. Therefore looping over
@@ -1352,12 +1356,72 @@ class DOMAgent implements DOMAgentInterface {
         
         for (const update of updates) {
             if (update instanceof HTMLElement) {
+                let target;
                 console.log(`DOMAgent.mergeHtml() - Going to merge the update '${update.tagName}[${update.id}]'.`)
                 
-                let target = document.getElementById(update.id);
+                if (update.id) {
+                    /* The update element has an id. */
+                    if (sourceNode && sourceNode.element?.id == update.id) {
+                        /* The element of the source node has the same id
+                           as the update element. */
+                        if (this.isTarget(sourceNode.element, update)) {
+                            /* The update can be applied to the element
+                               ofthe source node. */
+                            target = sourceNode.element;
+                        } else {
+                            /* The update cannot be applied to the element
+                               of the source node. */
+                            console.info(`DOMAgent.mergeHtml() - The update '${update.tagName}[${update.id}]' cannot be applied to the source node '${sourceNode}'.`);
+                        }
+                    } else {
+                        /* The source node does not match the update.
+                           An element with the same id is looked up
+                           in the active document. */
+                        const targetCandidate = document.getElementById(update.id);
+
+                        if (targetCandidate !== null && "enliwfenSwappable" in targetCandidate.dataset) {
+                            /* There is an element with the same id in the active
+                               document and it is marked to be swappable. The
+                               target element for the update has been identified. */
+                            target = targetCandidate;
+                        } else {
+                            /* There is an element with the same id. But the element
+                               is not marked swappable. The update is discarded. */
+                            console.info(`DOMAgent.mergeHTML() - The target for the update '${update.tagName}[${update.id}]' is not marked to be swappable.`);
+                        }
+                    }
+                } else if (sourceNode) {
+
+                } else {
+                    
+                }
+                /* Two cases have to be considered:
+                   1. The update element has an id set. In this case the corresponding
+                      element of the active document is looked up. A replacment will
+                      take place only, if there is a match and if the target element
+                      has set the attribute "data-enliwfen-swappable", which marks the
+                      element to be a candidate for replacement. Otherwise the update
+                      is discarded.
+                   2. The update element has no id. In this case a replacement will
+                      take place only, if the update element shares one of the
+                      following  */
+                target = document.getElementById(update.id);
                 
+                if (target !== null) {
+                    /* There is a match. Does the target element allows swapping?
+                       If not the update cannot replace the target. */
+                    if (! ("enliwfenSwappable" in target.dataset)) {
+                        console.info(`DOMAgent.mergeHTML() - The target for the update '${update.tagName}[${update.id}]' is not marked to be swappable.`);
+                        target = null;
+                    }
+                } else {
+                    /* There is no match. Does 
+                }
+
                 if (target === null) {
                     target = domTarget?.element || null;     
+                } else {
+                    console.info(`DOMAgent.mergeHTML() - No target found for the update '${update.tagName}[${update.id}]'.`);
                 }
                 
                 if (target !== null) {
