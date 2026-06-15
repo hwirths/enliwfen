@@ -1420,33 +1420,52 @@ class DOMAgent implements DOMAgentInterface {
     }
 
     mergeHtml(this: DOMAgent, htmlString: string, sourceNode?: DOMTarget): void {
-        /* The HTML string is parsed into a new document. The children of the body
-           element are the updates to merge into the main document. The children
-           collection of the body element is live updated. Therefore looping over
-           the children collection and removing elements from it at the same time
-           is'nt a good idea. Therefore the children are referenced in a separate
-           list, which is then used to loop over the updates. */
-        const update_document = this.parser.parseFromString(htmlString, "text/html"),
-              updates = [...update_document.body.children],
-              targetCandidate = sourceNode?.element || null;
-        
-        for (const update of updates) {
-            if (update instanceof HTMLElement) {
-                console.log(`DOMAgent.mergeHtml() - Going to merge the update '${update.tagName}[${update.id}]'.`)
-                
-                const target = this.getTarget(update, targetCandidate);
-                                
-                if (target !== null) {
-                    /* There is a target element on which the update
-                       can be applied. */
-                    try {
-                        this.replaceElement(target, update);
-                    } catch(error) {
-                        console.log(`DOMAgent.mergeHtml() - Error merging the update '${update.tagName}[${update.id}]' (${error}).`)
+        /* The HTML string is parsed into a new document. */
+        const document_update = this.parser.parseFromString(htmlString, "text/html"),
+              body_update = document_update.body;
+
+        if (body_update.id
+            && body_update.id === document.body.id
+            && document.body.dataset.enliwfenSwappable !== undefined) {
+            /* The update refers to the body of the document. The body
+               of the document is replaced. */
+            console.log(`DOMAgent.mergeHtml() - Going to replace the body of the document.`);
+
+            try {
+                this.replaceElement(document.body, body_update);
+            } catch(error) {
+                console.log(`DOMAgent.mergeHtml() - Error replacing the body of the document (${error}).`);
+            }
+        } else {
+            /* The body of the document update contains updates
+               of specific parts of the document. The children
+               collection of the body element is live updated. Therefore looping over
+               the children collection and removing elements from it at the same time
+               is'nt a good idea. Therefore the children are referenced in a separate
+               list, which is then used to loop over the updates.
+               TODO: Maybe looping as long as the children collection
+                     is not empty is an alternative approach. */
+            const updates = [...document_update.body.children],
+                targetCandidate = sourceNode?.element || null;
+            
+            for (const update of updates) {
+                if (update instanceof HTMLElement) {
+                    console.log(`DOMAgent.mergeHtml() - Going to merge the update '${update.tagName}[${update.id}]'.`)
+                    
+                    const target = this.getTarget(update, targetCandidate);
+                                    
+                    if (target !== null) {
+                        /* There is a target element on which the update
+                        can be applied. */
+                        try {
+                            this.replaceElement(target, update);
+                        } catch(error) {
+                            console.log(`DOMAgent.mergeHtml() - Error merging the update '${update.tagName}[${update.id}]' (${error}).`)
+                        }
                     }
                 }
-            }
-        }        
+            }        
+        }            
     }
     
     mergeJson(this: DOMAgent, json: any, domTarget?: DOMTarget): void {
