@@ -128,7 +128,7 @@
 <arrowlink DESTINATION="ID_1250837068"/>
 <node TEXT="before" ID="ID_625839024" CREATED="1772955814471" MODIFIED="1772957472270"/>
 <node TEXT="done" ID="ID_1097502121" CREATED="1772955825032" MODIFIED="1772957474838"/>
-<node TEXT="accepted" ID="ID_11833167" CREATED="1772955832406" MODIFIED="1772957479546"><richcontent TYPE="DETAILS" HIDDEN="true">
+<node TEXT="accepted" ID="ID_11833167" CREATED="1772955832406" MODIFIED="1772957479546"><richcontent TYPE="DETAILS">
 <html>
   <head>
     
@@ -167,7 +167,7 @@
 <node TEXT="204_NO_CONTENT" ID="ID_5807452" CREATED="1772956080543" MODIFIED="1772957218904">
 <arrowlink DESTINATION="ID_1097502121"/>
 </node>
-<node TEXT="205_RESET_CONTENT" ID="ID_1802084285" CREATED="1772956094027" MODIFIED="1773039200635"><richcontent TYPE="DETAILS" HIDDEN="true">
+<node TEXT="205_RESET_CONTENT" ID="ID_1802084285" CREATED="1772956094027" MODIFIED="1775224516256"><richcontent TYPE="DETAILS" HIDDEN="true">
 <html>
   <head>
     
@@ -185,6 +185,33 @@
     <p>
       reset for example a form.
     </p>
+    <p>
+      
+    </p>
+    <p>
+      The response code should be used exactly this way, in detail:
+    </p>
+    <p>
+      If the feature is a form, the form will be reset.
+    </p>
+    <p>
+      If the feature is a component, the component will be reloaded/updated.
+    </p>
+    <p>
+      Well, is there any other feature which would be a target of the reset content response code?
+    </p>
+  </body>
+</html></richcontent>
+</node>
+<node TEXT="401_NOT AUTHORIZED" ID="ID_1198925470" CREATED="1775224522047" MODIFIED="1775224729456"><richcontent TYPE="DETAILS">
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      Well, getting this result code, we would expect that the content contains instructions on how to proceed. Expecting links inside the content contradicts to show the result content within an iframe of a dialog element.
+    </p>
   </body>
 </html></richcontent>
 </node>
@@ -198,7 +225,7 @@
 </node>
 <node TEXT="DOM features" POSITION="bottom_or_right" ID="ID_190045104" CREATED="1772911192282" MODIFIED="1772911203692">
 <edge COLOR="#00ff00"/>
-<node TEXT="element replacement" ID="ID_774049873" CREATED="1772911207388" MODIFIED="1772957555646">
+<node TEXT="element replacement" ID="ID_774049873" CREATED="1772911207388" MODIFIED="1775224279351">
 <arrowlink DESTINATION="ID_1937435060" STARTARROW="NONE" ENDARROW="NONE"/>
 <richcontent TYPE="DETAILS" HIDDEN="true">
 <html>
@@ -243,6 +270,18 @@
       
     </p>
     <p>
+      Should dialog elements handled differently?
+    </p>
+    <p>
+      
+    </p>
+    <p>
+      Are there any situations where the placement of the new element cannot be defined within the active document? Or in other words: If the attribute &quot;data-enliwfen-target&quot; or &quot;data-enliwfen-targets&quot; is defined in the new element, should the new element then placed there? Which setting takes precedence?
+    </p>
+    <p>
+      
+    </p>
+    <p>
       Rules need to be defined:
     </p>
     <ul>
@@ -260,7 +299,7 @@
             The launching element has defined more than<br/>one target element: The first target element<br/>will be replaced by the new element.
           </li>
           <li>
-            The launching element has not defined a<br/>target element: The launching element will<br/>be replaced by the new element.
+            The launching element has not defined a<br/>target element: The launching element will<br/>be replaced by the new element. Should this be applied as well to action elements like links and buttons?
           </li>
         </ul>
       </li>
@@ -275,7 +314,7 @@
             The launching element has defined more than<br/>one target element: The target elements will<br/>be replaced by the new element.
           </li>
           <li>
-            The launching element has not defined a<br/>target element: The launching element will<br/>be replaced by the new element.
+            The launching element has not defined a<br/>target element: The launching element will<br/>be replaced by the new element. Should this be applied as well to action elements like links and buttons?
           </li>
         </ul>
       </li>
@@ -392,9 +431,9 @@
 </html></richcontent>
 </node>
 <node TEXT="attribute/class toggling" ID="ID_1544333564" CREATED="1772873646357" MODIFIED="1772873665452">
-<node TEXT="collapsing" ID="ID_269323032" CREATED="1772873504768" MODIFIED="1772912371520">
-<arrowlink DESTINATION="ID_473606652" STARTINCLINATION="857.99997 pt;-193.49999 pt;" ENDINCLINATION="920.99997 pt;-193.49999 pt;" STARTARROW="NONE" ENDARROW="NONE"/>
-<richcontent TYPE="DETAILS" HIDDEN="true">
+<node TEXT="collapsing" ID="ID_269323032" CREATED="1772873504768" MODIFIED="1775204214987">
+<arrowlink DESTINATION="ID_473606652" STARTINCLINATION="857.99997 pt;-191.99999 pt;" ENDINCLINATION="920.99997 pt;-191.99999 pt;" STARTARROW="NONE" ENDARROW="NONE"/>
+<richcontent TYPE="DETAILS">
 <html>
   <head>
     
@@ -414,6 +453,18 @@
     </p>
     <p>
       show request.
+    </p>
+    <p>
+      
+    </p>
+    <p>
+      The HTML element &quot;details&quot; may be involved and a good candidate to be automatically associated with this feature.
+    </p>
+    <p>
+      
+    </p>
+    <p>
+      A use case might be the on demand loading of details content. Given a closed details element at the beginning, the content can be loaded in reaction to the toggle event. Question: What if details are already loaded? Maybe there should be an option to control loading behaviour as for example &quot;load-always-on-open&quot; or &quot;load-only-once&quot;.
     </p>
   </body>
 </html></richcontent>
