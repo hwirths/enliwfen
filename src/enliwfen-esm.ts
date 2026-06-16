@@ -9,6 +9,11 @@ import morphdom from "morphdom"
 const version = "0.1.0";
 const enliwfen = "enliwfen";
 
+const ENLIWFEN_HEADERS = {
+    REQUEST: "x-enlwifen-request",
+    RELOAD: "x-enliwfen-reload"
+};
+
 class DOMQuery {
     
     static selectFirst(selectors: string, scope: HTMLElement | null = null): HTMLElement | null {
@@ -748,10 +753,8 @@ class Endpoint {
               requestOptions = {method: method} as any;
               
         if (url !== undefined) {
-            if (headers) {
-                requestOptions.headers = headers;
-            }
-            
+            requestOptions.headers = Object.assign(headers || {}, {"x-enliwfen-request": "true"});
+
             if (timeout > 0) {
                 console.debug(`Endpoint.call() [${this.node}] - A timeout of '${timeout}ms' is going to be set for call of '${url}'.`)
                 requestOptions.signal = AbortSignal.timeout(timeout);
@@ -769,7 +772,7 @@ class Endpoint {
                 case "BUTTON":
                 case "INPUT":
                 case "SELECT":
-                    /* A request body with form data will be added, if the
+                    /* A request body with form data will be added, if
                        the element belongs to a form and the HTTP method
                        is set to 'post'. */
                     const form = (element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement).form
@@ -1337,41 +1340,132 @@ class DOMAgent implements DOMAgentInterface {
         }
     }
     
-    mergeHtml(this: DOMAgent, htmlString: string, domTarget?: DOMTarget): void {
-        /* The HTML string is parsed into a new document. The children of the body
-           element are the updates to merge into the main document. The children
-           collection of the body element is live updated. Therefore looping over
-           the children collection and removing elements from it at the same time
-           is'nt a good idea. Therefore the children are referenced in a separate
-           list, which is then used to loop over the updates. */
-        const update_document = this.parser.parseFromString(htmlString, "text/html"),
-              updates = [...update_document.body.children];
+    private isTarget(this: DOMAgent, targetCandidate: HTMLElement, update: HTMLElement): boolean {
+        if (update instanceof HTMLFormElement && targetCandidate instanceof HTMLFormElement) {
+            /* Both elements are form elements. They are swappable if they
+               have the same action and the same method.
+               Remind that even wizards can be bound to the same
+               action path. */
+            return update.action === targetCandidate.action && update.method === targetCandidate.method;
+        }
+
+        if (update instanceof HTMLLinkElement && targetCandidate instanceof HTMLLinkElement) {
+            /* Links are swappable without any further constraints, so far. */
+            return true;
+        }
+
+        if (targetCandidate.tagName !== update.tagName) {
+            /* The tag name of the target candidate is different to
+               the tag name of the update element. */
+            return false;
+        }
+
+        if ("enliwfenSwappable" in targetCandidate.dataset || "enliwfenUpdatable" in targetCandidate.dataset) {
+            /* The target candidate and the update element have the same
+               tag name. Further the target candidate is marked as swappable
+               and/or updatable. The update can be applied to the target
+               candidate. */
+            return true;
+        }
         
-        for (const update of updates) {
-            if (update instanceof HTMLElement) {
-                console.log(`DOMAgent.mergeHtml() - Going to merge the update '${update.tagName}[${update.id}]'.`)
-                
-                let target = document.getElementById(update.id);
-                
-                if (target === null) {
-                    target = domTarget?.element || null;     
-                }
-                
-                if (target !== null) {
-                    try {
-                        this.replaceElement(target, update);
-                    } catch(error) {
-                        console.log(`DOMAgent.mergeHtml() - Error merging the update '${update.tagName}[${update.id}]' (${error}).`)
-                    }
+        return false;
+    }
+
+    private getTarget(update: HTMLElement, targetCandidate: HTMLElement | null): HTMLElement | null {
+        let target = null;
+
+        if (update.id) {
+            /* The update element has an id. */
+            if (targetCandidate?.id == update.id) {
+                /* The element of the source node has the same id
+                    as the update element. */
+                if (this.isTarget(targetCandidate, update)) {
+                    /* The update can be applied to the element
+                        ofthe source node. */
+                    target = targetCandidate;
                 } else {
-                    console.log(`DOMAgent.mergeHtml() - New HTML element '${update.tagName}#${update.id}' is going to be appended to the body.`);
-                    document.body.appendChild(update);
+                    /* The update cannot be applied to the element
+                        of the source node. */
+                    console.info(`DOMAgent.getTarget() - The update '${update.tagName}[${update.id}]' cannot be applied to the source node '${sourceNode}'.`);
                 }
-            } else {                
-                console.log(`DOMAgent.mergeHtml() - New element '${update.tagName}#${update.id}' is appended to the body.`);
-                document.body.appendChild(update);
+            } else {
+                /* The source node does not match the update.
+                    An element with the same id is looked up
+                    in the active document. */
+                targetCandidate = document.getElementById(update.id);
+
+                if (targetCandidate !== null && "enliwfenSwappable" in targetCandidate.dataset) {
+                    /* There is an element with the same id in the active
+                        document and it is marked to be swappable. The
+                        target element for the update has been identified. */
+                    target = targetCandidate;
+                } else {
+                    /* There is an element with the same id. But the element
+                        is not marked swappable. The update is discarded. */
+                    console.info(`DOMAgent.getTarget() - The target for the update '${update.tagName}[${update.id}]' is not marked to be swappable.`);
+                }
             }
-        }        
+        } else if (targetCandidate && this.isTarget(targetCandidate, update)) {
+            /* The update node does not have an id. The element of the
+                source node can act as target for the update. */
+            target = targetCandidate;
+        } else {
+            /* No element of the active document can be
+                identified as a target for the update.
+                The update is discarded. */
+            console.info(`DOMAgent.getTarget() - No target found for the update '${update.tagName}[${update.id}]'`);
+        }
+
+        return target;
+    }
+
+    mergeHtml(this: DOMAgent, htmlString: string, sourceNode?: DOMTarget): void {
+        /* The HTML string is parsed into a new document. */
+        const document_update = this.parser.parseFromString(htmlString, "text/html"),
+              body_update = document_update.body;
+
+        if (body_update.id
+            && body_update.id === document.body.id
+            && document.body.dataset.enliwfenSwappable !== undefined) {
+            /* The update refers to the body of the document. The body
+               of the document is replaced. */
+            console.log(`DOMAgent.mergeHtml() - Going to replace the body of the document.`);
+
+            try {
+                this.replaceElement(document.body, body_update);
+            } catch(error) {
+                console.log(`DOMAgent.mergeHtml() - Error replacing the body of the document (${error}).`);
+            }
+        } else {
+            /* The body of the document update contains updates
+               of specific parts of the document. The children
+               collection of the body element is live updated. Therefore looping over
+               the children collection and removing elements from it at the same time
+               is'nt a good idea. Therefore the children are referenced in a separate
+               list, which is then used to loop over the updates.
+               TODO: Maybe looping as long as the children collection
+                     is not empty is an alternative approach. */
+            const updates = [...document_update.body.children],
+                targetCandidate = sourceNode?.element || null;
+            
+            for (const update of updates) {
+                if (update instanceof HTMLElement) {
+                    console.log(`DOMAgent.mergeHtml() - Going to merge the update '${update.tagName}[${update.id}]'.`)
+                    
+                    const target = this.getTarget(update, targetCandidate);
+                                    
+                    if (target !== null) {
+                        /* There is a target element on which the update
+                        can be applied. */
+                        try {
+                            this.replaceElement(target, update);
+                        } catch(error) {
+                            console.log(`DOMAgent.mergeHtml() - Error merging the update '${update.tagName}[${update.id}]' (${error}).`)
+                        }
+                    }
+                }
+            }        
+        }            
     }
     
     mergeJson(this: DOMAgent, json: any, domTarget?: DOMTarget): void {

@@ -46,3 +46,41 @@ A simple example:
 ~~~
 
 The form handler is expected to deliver the form only, which then get's updated on the page. That's it for a simple Ajax - driven form.
+
+## Attributes
+
+* data-enliwfen-swappable: Allows content replacement
+* data-enliwfen-update/data-enliwfen-url: Allows component updates
+* data-enliwfen-method: In combination with a form
+* data-enliwfen-action: In combination with a form
+* data-enliwfen-href (?): In combination with a link
+* data-enliwfen-indicator: Identifies the indicator element to show during a load
+* data-enliwfen-inert: Identifies the element to inert during the load
+* data-enliwfen-notification: Identifies the features to notify after finishing the load
+* data-enliwfen-interval: In combination with "data-enliwfen-update/data-enliwfen-url" the interval defines the milliseconds between two polling calls
+* data-enliwfen-deferred: Defers the update of an element
+* data-enliwfen-listen: Listens to the given events. Each of the events triggers an update.
+* data-enliwfen-eventsource: Listen to server sent events. Specific events:
+  * enliwfen-update: The event data contains an update/patch of the document
+  * enliwfen-keepalive: Event without data used to keep alive the connection, preventing server side closing of connection if needed. This event will never be dispatched to listeners.
+
+## DOM Agent
+
+### Request headers
+
+* "x-enliwfen-request": Marks the request as launched by enliwfen.
+
+### Response headers
+
+* "x-enliwfen-reload": Reloads the entire page. Best used with an HTTP 204 (no content) response code.
+
+### Targeting updates
+
+Updates are primarily addressed to elements with an unique id.
+
+After parsing the response document each child of the body element is checked:
+
+* If the element has an id set, the corresponding element in the active document is looked up and replaced. Otherwise it is handled as if no id has been set.
+* If the element has no id set it replaces the element which triggered the load.
+* In any other case the new element is discarded.
+
