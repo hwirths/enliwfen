@@ -12,18 +12,24 @@
         "url": "git+https://github.com/hwirths/enliwfen.git"
     },
     "dependencies": {
-        "dompurify": "^3.3.2",
         "esm": "^3.2.25"
     },
     "private": true,
-    "main": "index.js",
-    "module": "main.js",
+    "type": "module",
     "directories": {
         "doc": "docs"
     },
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "dev": "./node_modules/.bin/vite",
+        "test": "./node_modules/.bin/vitest",
+        "compile": "tsc",
+        "build": "tsc && ./node_modules/.bin/vite build",
+        "preview": "./node_modules/.bin/vite preview"
     },
-    "keywords": [],
-    "author": ""
+    "devDependencies": {
+        "jsdom": "^29.1.1",
+        "typescript": "~6.0.2",
+        "vite": "^8.1.1",
+        "vitest": "^5.0.1"
+    }
 }
