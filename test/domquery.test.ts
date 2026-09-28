@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { DOMQuery } from "./DOMQuery";
-import { enliwfen } from "./declarations";
+import { DOMQuery } from "../src/domquery";
+import { enliwfen } from "../src/declarations";
 
 describe("DOMQuery", () => {
     beforeEach(() => {
