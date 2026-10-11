@@ -261,7 +261,7 @@ export class Endpoint {
     /*
      * @param node An instance of class FeatureNode
      */
-    async call(this: Endpoint, method: string, headers: object, timeout: number) {
+    async call(this: Endpoint, method: string, headers: object | undefined, timeout: number) {
         const {url, element} = this,
               requestOptions = {method: method} as any;
               
