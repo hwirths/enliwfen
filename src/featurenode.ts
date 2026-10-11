@@ -123,13 +123,18 @@ export class FeatureNode {
      specifies a header entry.   
      */
     get headers(): object | null {
-        if (this._headers === undefined) {
-            const headers = this.dataset.enliwfenHeaders;
+        let headers: object | null = null;
+
+        if (this._headers !== undefined) {
+            headers = this._headers;
+        } else {
+            headers = this.dataset.enliwfenHeaders;
             
             this._headers = headers ? JSON.parse(headers) : null;
+            headers = this._headers;
         }
         
-        return this._headers
+        return headers;
     }
     
     /*
@@ -139,19 +144,24 @@ export class FeatureNode {
      be used. 
      */
     get timeout(): number {
-        if (this._timeout === undefined) {
+        let timeout = 30000;
+
+        if (this._timeout !== undefined) {
+            timeout = this._timeout;
+        } else {
             const enliwfenTimeout = this.dataset.enliwfenTimeout;
             
             if (enliwfenTimeout) {
-                const timeout = parseInt(enliwfenTimeout);
+                const parsedTimeout = parseInt(enliwfenTimeout);
                 
-                this._timeout = !Number.isNaN(timeout) ? Math.max(0, timeout) : 30000;
+                this._timeout = !Number.isNaN(parsedTimeout) ? Math.max(0, parsedTimeout) : 30000;
+                timeout = this._timeout;
             } else {
-                this._timeout = 30000;
+                this._timeout = timeout;
             }
         }
         
-        return this._timeout
+        return timeout
     }
     
     /*

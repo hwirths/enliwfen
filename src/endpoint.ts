@@ -264,7 +264,6 @@ export class Endpoint {
     async call(this: Endpoint, method: string, headers: object | null, timeout: number) {
         const {url, element} = this,
               requestMethod = method || "GET",
-              requestTimeout = 
               requestOptions = {method: requestMethod} as any;
               
         requestOptions.headers = Object.assign(headers || {}, {"x-enliwfen-request": "true"});
