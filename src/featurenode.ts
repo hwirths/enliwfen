@@ -98,24 +98,20 @@ export class FeatureNode {
             'data-enliwfen-method'.
           - Otherwise the default method 'GET' will be returned.
      */
-    get method() {
-        if (this._method === undefined) {
-            const element = this._element;
-            
-            switch(element.tagName) {
-                case "FORM":
-                    return this.deferred ? "GET" : (element as HTMLFormElement).method
-                
-                case "BUTTON":
-                case "INPUT":
-                    return (element as HTMLButtonElement | HTMLInputElement).formMethod || element.dataset.enliwfenMethod || "GET"
-                    
-                default:
-                    return element.dataset.enliwfenMethod || "GET"
-            }
-        }
+    get method(): string {
+        const element = this._element;
         
-        return this._method
+        switch(element.tagName) {
+            case "FORM":
+                return this.deferred ? "GET" : (element as HTMLFormElement).method
+            
+            case "BUTTON":
+            case "INPUT":
+                return (element as HTMLButtonElement | HTMLInputElement).formMethod || element.dataset.enliwfenMethod || "GET"
+                
+            default:
+                return element.dataset.enliwfenMethod || "GET"
+        }
     }
     
     /*
@@ -126,7 +122,7 @@ export class FeatureNode {
      to be a JSON object, where each key / value pair
      specifies a header entry.   
      */
-    get headers() {
+    get headers(): object | null {
         if (this._headers === undefined) {
             const headers = this.dataset.enliwfenHeaders;
             
@@ -142,7 +138,7 @@ export class FeatureNode {
      default value of 30000 milliseconds will
      be used. 
      */
-    get timeout() {
+    get timeout(): number {
         if (this._timeout === undefined) {
             const enliwfenTimeout = this.dataset.enliwfenTimeout;
             

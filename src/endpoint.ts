@@ -261,9 +261,11 @@ export class Endpoint {
     /*
      * @param node An instance of class FeatureNode
      */
-    async call(this: Endpoint, method: string, headers: object | undefined, timeout: number) {
+    async call(this: Endpoint, method: string, headers: object | null, timeout: number) {
         const {url, element} = this,
-              requestOptions = {method: method} as any;
+              requestMethod = method || "GET",
+              requestTimeout = 
+              requestOptions = {method: requestMethod} as any;
               
         requestOptions.headers = Object.assign(headers || {}, {"x-enliwfen-request": "true"});
 
@@ -277,7 +279,7 @@ export class Endpoint {
         if (element) {
             switch(element.tagName) {
                 case "FORM":
-                    if (method.toLowerCase() === "post") {
+                    if (requestMethod.toLowerCase() === "post") {
                         requestOptions.body = new FormData(element as HTMLFormElement);
                     }
                     break;
@@ -290,7 +292,7 @@ export class Endpoint {
                     is set to 'post'. */
                     const form = (element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement).form
                     
-                    if (form && (method.toLowerCase() === "post")) {
+                    if (form && (requestMethod.toLowerCase() === "post")) {
                         requestOptions.body = new FormData(form);
                     }
                     break;
