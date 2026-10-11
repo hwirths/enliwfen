@@ -1,11 +1,10 @@
-import type { DOMAgentInterface } from "./declarations";
-import type { FeatureNode } from "./featurenode";
-
+import type { DOMAgent } from "./domagent";
 
 export class Endpoint {
-    node: FeatureNode
-    domAgent: DOMAgentInterface
-    
+    url: string;
+    element: HTMLElement | null;
+    domAgent: DOMAgent;
+
     static getMimeType(response: Response) {
         const contentType = response.headers.get("Content-Type");
         
@@ -17,9 +16,10 @@ export class Endpoint {
                a ';' after the mime type. */
             const parameterIndex = contentType.indexOf(";");
             
-            return parameterIndex === -1 ?
+            return (parameterIndex === -1 ?
                 contentType
-                : contentType.substring(0, parameterIndex);
+                : contentType.substring(0, parameterIndex)
+            ).trim().toLowerCase();
         }              
         
         return contentType
@@ -28,13 +28,15 @@ export class Endpoint {
     /*
      * @param node An instance of class FeatureNode
      */
-    constructor(node: FeatureNode, domAgent: DOMAgentInterface) {
-        this.node = node;
+    constructor(url: string, domAgent: DOMAgent, element: HTMLElement | null) {
+        this.url = url;
         this.domAgent = domAgent;
+        this.element = element;
     }
     
-    async succeeded(response: Response) {
-        const mimeType = Endpoint.getMimeType(response);
+    async succeeded(this: Endpoint, response: Response) {
+        const mimeType = Endpoint.getMimeType(response),
+              element = this.element;
               
         if (response.headers.has("Content-Length")) {
             switch(mimeType) {
@@ -46,12 +48,12 @@ export class Endpoint {
                     } else if (jsonResponse.replace_location) {
                         location.replace(jsonResponse.replace_location);
                     } else {
-                        this.domAgent.mergeJson(jsonResponse, this.node);
+                        this.domAgent.updateFromJson(jsonResponse, element);
                     }
                     break;
                 
                 case "text/html":
-                    this.domAgent.mergeHtml(await response.text(), this.node);
+                    this.domAgent.updateFromHtml(await response.text(), element);
                     break;
                     
                 case "application/pdf":
@@ -126,12 +128,12 @@ export class Endpoint {
                                     try {
                                         const jsonString = currentUpdate.substring(jsonIdentifier.length),
                                               jsonUpdate = JSON.parse(jsonString);
-                                        this.domAgent.mergeJson(jsonUpdate, this.node)
+                                        this.domAgent.updateFromJson(jsonUpdate, element)
                                     } catch (error) {
-                                        console.warn(`Endpoint.succeeded() [${this.node}] - Error parsing expected JSON string : ${error}`);
+                                        console.warn(`Endpoint.succeeded() [${this.url}] - Error parsing expected JSON string : ${error}`);
                                     }
                                 } else {
-                                    this.domAgent.mergeHtml(currentUpdate, this.node);    
+                                    this.domAgent.updateFromHtml(currentUpdate, element);    
                                 }
                                 
                                 const startOfUpdate = remainingText.indexOf(updateStart);
@@ -157,12 +159,12 @@ export class Endpoint {
                             } else if (jsonResponse.replace_location) {
                                 location.replace(jsonResponse.replace_location);
                             } else {
-                                this.domAgent.mergeJson(jsonResponse, this.node);
+                                this.domAgent.updateFromJson(jsonResponse, element);
                             }
                             break;
                         
                         case "text/html":
-                            this.domAgent.mergeHtml(remainingText, this.node);
+                            this.domAgent.updateFromHtml(remainingText, element);
                             break;
                             
                         default:
@@ -170,15 +172,15 @@ export class Endpoint {
                     }
                 }
             } catch (error) {
-                console.error(`Endpoint.succeeded() [${this.node}] - Failed to read the stream from ${this.node.url} ({error})`)
+                console.error(`Endpoint.succeeded() [${this.url}] - Failed to read the stream ({error}).`)
             }
         } /* endif (response.headers.has("Content-Length")) */
     }
     
-    async failed(response: Response) {
+    async failed(this: Endpoint, response: Response) {
         switch(Endpoint.getMimeType(response)) {            
             case "application/json":
-                this.domAgent.mergeJson(await response.json(), this.node);
+                this.domAgent.updateFromJson(await response.json(), this.element);
                 break;
                 
             case "text/html":
@@ -192,7 +194,7 @@ export class Endpoint {
                    successful call. */
                 const text = (await response.text()).trimStart();
                 
-                this.domAgent.showError(text, this.node);
+                this.domAgent.showError(text, this.element);
                 break;
                 
             default:
@@ -200,7 +202,7 @@ export class Endpoint {
         }
     }
     
-    async fetched(response: Response) {
+    async fetched(this: Endpoint, response: Response) {
         switch(response.status) {
             case 200: /* OK */
             case 201: /* CREATED */
@@ -217,8 +219,14 @@ export class Endpoint {
             case 205: /* RESET CONTENT */
                 /* The server asks to reset the content of
                    the document, which sent the request.
-                   The entire page is reloaded. */
-                location.reload();
+                   So far, this appies to forms only. */
+                const element = this.element;
+
+                if (element?.tagName === "FORM") {
+                    (element as HTMLFormElement).reset()
+                } else {
+                    console.warn(`Endpoint.fetched() [${this.url}] - Received HTTP repsonse code 205 not related to a form element.`)
+                }
                 break;
             
             case 500:
@@ -241,7 +249,7 @@ export class Endpoint {
             default:
                 switch(Endpoint.getMimeType(response)) {            
                     case "text/html":
-                        this.domAgent.showError(await response.text(), this.node);
+                        this.domAgent.showError(await response.text(), this.element);
                         break;
                         
                     default:
@@ -253,20 +261,20 @@ export class Endpoint {
     /*
      * @param node An instance of class FeatureNode
      */
-    async call() {
-        const {element, url, method, headers, timeout} = this.node,
+    async call(this: Endpoint, method: string, headers: object, timeout: number) {
+        const {url, element} = this,
               requestOptions = {method: method} as any;
               
-        if (url !== undefined) {
-            requestOptions.headers = Object.assign(headers || {}, {"x-enliwfen-request": "true"});
+        requestOptions.headers = Object.assign(headers || {}, {"x-enliwfen-request": "true"});
 
-            if (timeout > 0) {
-                console.debug(`Endpoint.call() [${this.node}] - A timeout of '${timeout}ms' is going to be set for call of '${url}'.`)
-                requestOptions.signal = AbortSignal.timeout(timeout);
-            } else {
-                console.debug(`Endpoint.call() [${this.node}] - No timeout ist set for call of '${url}'.`)
-            }
-            
+        if (timeout > 0) {
+            console.debug(`Endpoint.call() [${url}] - A timeout of '${timeout}ms' is going to be set for the call`)
+            requestOptions.signal = AbortSignal.timeout(timeout);
+        } else {
+            console.debug(`Endpoint.call() [${url}] - No timeout is going to be set set for the call.`)
+        }
+        
+        if (element) {
             switch(element.tagName) {
                 case "FORM":
                     if (method.toLowerCase() === "post") {
@@ -278,8 +286,8 @@ export class Endpoint {
                 case "INPUT":
                 case "SELECT":
                     /* A request body with form data will be added, if
-                       the element belongs to a form and the HTTP method
-                       is set to 'post'. */
+                    the element belongs to a form and the HTTP method
+                    is set to 'post'. */
                     const form = (element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement).form
                     
                     if (form && (method.toLowerCase() === "post")) {
@@ -289,17 +297,17 @@ export class Endpoint {
             }
     
             element.inert = true;
-            
-            try {
-                await this.fetched(await fetch(url, requestOptions));
-            } catch (error) {
-                console.error(error);
-                this.domAgent.showError(`<html><body><h1>An unexpected error occured.</h1><p>Details: ${error}</p></body></html>`)
-            } finally {
+        }
+        
+        try {
+            await this.fetched(await fetch(url, requestOptions));
+        } catch (error) {
+            console.error(error);
+            this.domAgent.showError(`<html><body><h1>An unexpected error occured.</h1><p>Details: ${error}</p></body></html>`)
+        } finally {
+            if (element) {
                 element.inert = false;
             }
-        } else {
-            console.log(`Endpoint.call() [${this.node}] - No URL to call ist set in the feature node '${element}'.`)
         }
     }
 

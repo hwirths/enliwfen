@@ -3,9 +3,9 @@
     RELOAD: "x-enliwfen-reload"
 }; */
 
-import type { DOMTarget, DOMAgentInterface, FeatureFactoryInterface } from "./declarations";
-import { version, enliwfen } from "./declarations";
+import { version } from "./declarations";
 import { DOMQuery } from "./domquery";
+import { DOMAgent } from "./domagent";
 import { FeatureNode }from "./featurenode";
 import { Feature } from  "./feature";
 import { Endpoint } from "./endpoint";
@@ -192,19 +192,21 @@ class Dialog extends Feature {
 class ServerInteractionFeature extends Feature {
     readonly endpoint: Endpoint;
     
-    constructor(element: HTMLElement, domAgent: DOMAgentInterface) {
+    constructor(element: HTMLElement, domAgent: DOMAgent) {
         super(element);
 
-        this.endpoint = new Endpoint(this.node, domAgent);
+        this.endpoint = new Endpoint(this.node.url, domAgent, this.node.element);
     }
     
-    async callServer({eventBefore, eventAfter}: {eventBefore: string, eventAfter: string}) {
+    async callServer(this: ServerInteractionFeature, {eventBefore, eventAfter}: {eventBefore: string, eventAfter: string}) {
+        const {method, headers, timeout} = this.node;
+
         if (eventBefore) {            
             this.node.dispatchEvent(`enliwfen.${eventBefore}`);
             this.notifyObservers(`enliwfen.${eventBefore}`);
         }
         
-        await this.endpoint.call();
+        await this.endpoint.call(method, headers, timeout);
         
         if (eventAfter) {
             this.notifyObservers(`enliwfen.${eventAfter}`);
@@ -215,7 +217,7 @@ class ServerInteractionFeature extends Feature {
  
 class ActionCall extends ServerInteractionFeature {
     
-    constructor(element: HTMLElement, domAgent: DOMAgentInterface) {
+    constructor(element: HTMLElement, domAgent: DOMAgent) {
         super(element, domAgent);
         
         if (this.node.event !== null) {
@@ -297,9 +299,9 @@ class EventSourceMap {
 class Component extends ServerInteractionFeature {
     _intervalID?: number;
     _eventSource?: EventSource;
-    readonly domAgent: DOMAgentInterface
+    readonly domAgent: DOMAgent
     
-    constructor(element: HTMLElement, domAgent: DOMAgentInterface) {
+    constructor(element: HTMLElement, domAgent: DOMAgent) {
         super(element, domAgent);
 
         const node = this.node,
@@ -350,13 +352,14 @@ class Component extends ServerInteractionFeature {
             super.observerUpdate(updateDetail);
         }
     }
+    
     handleEvent(event: Event) {
         if (event.type === this.node.event) {
             if (event instanceof MessageEvent && event.data) {
                 console.debug(`Component.handleEvetn [${this.node}] - Got event data ${event.data}.`);
                 try {
                     const jsonUpdates = JSON.parse(event.data);
-                    this.domAgent.mergeJson(jsonUpdates, this.node)
+                    this.domAgent.updateFromJson(jsonUpdates, this.node.element)
                 } catch (error) {
                     console.warn(`Component.handleEvent() [${this.node}] - Error parsing expected JSON string : ${error}`);
                 }
@@ -378,13 +381,15 @@ class Component extends ServerInteractionFeature {
 
 class Form extends ServerInteractionFeature {
     
-    constructor(element: HTMLElement, domAgent: DOMAgentInterface) {
+    constructor(element: HTMLElement, domAgent: DOMAgent) {
         super(element, domAgent);
         
         const node = this.node;
         
         if (node.deferred) {
-            this.endpoint.call();
+            const {method, headers, timeout} = node;
+
+            this.endpoint.call(method, headers, timeout);
         } else if (node.event !== null) {
             element.addEventListener(node.event, this);
         }
@@ -404,7 +409,7 @@ class Datalist extends Feature {
     _lastMatch?: string;
     _scheduled?: number;
     
-    constructor(element: HTMLElement, domAgent: DOMAgentInterface) {
+    constructor(element: HTMLElement, domAgent: DOMAgent) {
         super(element);
         
         if (this.node.event !== null) {
@@ -464,80 +469,11 @@ class Datalist extends Feature {
     }
 }
 
-/*
-*/
-class DOMAgent implements DOMAgentInterface {
+class FeatureFactory extends DOMAgent {
     
-    readonly parser = new DOMParser();
-    readonly featureFactory: FeatureFactoryInterface
+    replaceElement(this: FeatureFactory, target: HTMLElement, update: HTMLElement): void {
+        console.debug(`FeatureFactroy.replaceElement() - New HTML element '${update.tagName}#${update.id}' is going to replace element '${target.tagName}#${target.id}'.`)
 
-    constructor(featureFactory: FeatureFactoryInterface) {
-        this.featureFactory = featureFactory;
-    }
-
-    static dispatchEvent(scope: HTMLElement, event: CustomEvent) {
-        if (scope.classList.contains(enliwfen)) {
-            scope.dispatchEvent(event);
-        }
-
-        for (const element of scope.getElementsByClassName(enliwfen)) {
-            element.dispatchEvent(event);
-        }
-    }
-    
-    static openDialog(element: HTMLElement) {
-        /* Create the elements used to build the error dialog
-           and to present the error page. */
-        const errorContainer = document.createElement("div"),
-              shadowRoot = errorContainer.attachShadow({mode: "open"}),
-              errorDialog = document.createElement("dialog"),
-              closeButton = document.createElement("button"),
-              body = document.body;
-
-        /* Configure the close button */
-        closeButton.appendChild(document.createTextNode("X"));
-        closeButton.setAttribute("autofocus", "");
-        closeButton.setAttribute("style", "display: block; width: 2rem; height: 2rem; float: right; font-size: 1rem;");
-        
-        /* On click close the error dialog */
-        closeButton.addEventListener("click", () => errorDialog.close());
-
-        /* Configure the error dialog and append the
-           close button and the iframe. */
-        errorDialog.setAttribute("style", "width: 75vw; height:75vh;");
-        errorDialog.appendChild(closeButton);
-        errorDialog.appendChild(element);
-        
-        /* Remove the error container from the body
-           on close of the error dialog */
-        errorDialog.addEventListener("close", () => errorContainer.remove());
-        
-        /* Append the error dialog to the shadow root,
-           the error container to the body and
-           show the dialog in modal shape */
-        shadowRoot.appendChild(errorDialog);
-        body.appendChild(errorContainer);
-        errorDialog.showModal();
-    }
-
-    static openErrorDialog(data: string) {
-        /* Create the elements used to build the error dialog
-           and to present the error page. */
-        const errorPage = document.createElement("iframe");
-
-        /* Configure the error page and set the data */        
-        errorPage.setAttribute("sandbox", "");        
-        errorPage.setAttribute("style", "width: 100%; height: calc(100% - 3rem); margin-top: 1rem")
-        errorPage.setAttribute("srcdoc", data);
-
-        DOMAgent.openDialog(errorPage);        
-    }
-       
-    replaceElement(this: DOMAgent, target: HTMLElement, update: HTMLElement): void {
-        console.debug(`DOMAgent.replaceElement() - New HTML element '${update.tagName}#${update.id}' is going to replace the corresponding HTML element of the document.`)
-
-        const featureFactory = this.featureFactory;
-        
         /* Destroy all features of the target subtree. */
         for (const feature of Feature.features(target)) {
             feature.destroy();
@@ -553,177 +489,8 @@ class DOMAgent implements DOMAgentInterface {
         /* Now that the update has replaced the target
            the collected feature nodes can be created. */
         for (const featureElement of DOMQuery.featureElements(update)) {
-            featureFactory.createFeature(featureElement);
+            this.createFeature(featureElement);
         }
-    }
-    
-    // private isTarget(this: DOMAgent, targetCandidate: HTMLElement, update: HTMLElement): boolean {
-    //     if (update instanceof HTMLFormElement && targetCandidate instanceof HTMLFormElement) {
-    //         /* Both elements are form elements. They are swappable if they
-    //            have the same action and the same method.
-    //            Remind that even wizards can be bound to the same
-    //            action path. */
-    //         return update.action === targetCandidate.action && update.method === targetCandidate.method;
-    //     }
-
-    //     if (update instanceof HTMLLinkElement && targetCandidate instanceof HTMLLinkElement) {
-    //         /* Links are swappable without any further constraints, so far. */
-    //         return true;
-    //     }
-
-    //     if (targetCandidate.tagName !== update.tagName) {
-    //         /* The tag name of the target candidate is different to
-    //            the tag name of the update element. */
-    //         return false;
-    //     }
-
-    //     if ("enliwfenSwappable" in targetCandidate.dataset || "enliwfenUpdatable" in targetCandidate.dataset) {
-    //         /* The target candidate and the update element have the same
-    //            tag name. Further the target candidate is marked as swappable
-    //            and/or updatable. The update can be applied to the target
-    //            candidate. */
-    //         return true;
-    //     }
-        
-    //     return false;
-    // }
-
-    private getTarget(update: HTMLElement, targetCandidate: HTMLElement | null): HTMLElement | null {
-        let target = null;
-
-        if (update.id) {
-            /* The update element has an id. */
-            if (targetCandidate?.id == update.id) {
-                /* The element of the source node has the same id
-                    as the update element. The target candidate
-                    will be the target of the update. */
-                target = targetCandidate;
-            } else {
-                /* The source node does not match the update.
-                    An element with the same id is looked up
-                    in the active document.
-                    If no element matches the id, the result
-                    will be the target candidate, if given,
-                    or 'null'. */
-                target = document.getElementById(update.id) || targetCandidate;
-            }
-        } else if (targetCandidate /* && this.isTarget(targetCandidate, update) */) {
-            /* The update node does not have an id. The element of the
-                source node can act as target for the update.
-                TODO: Integrate method 'isTarget()' into the check, in order
-                to get more control over replacements. */
-            target = targetCandidate;
-        }
-
-        return target;
-    }
-
-    mergeHtml(this: DOMAgent, htmlString: string, sourceNode?: DOMTarget): void {
-        /* The HTML string is parsed into a new document. */
-        const document_update = this.parser.parseFromString(htmlString, "text/html"),
-              body_update = document_update.body;
-
-        if (body_update.id
-            && body_update.id === document.body.id
-            && document.body.dataset.enliwfenSwappable !== undefined) {
-            /* The update refers to the body of the document. The body
-               of the document is replaced. */
-            console.log(`DOMAgent.mergeHtml() - Going to replace the body of the document.`);
-
-            try {
-                this.replaceElement(document.body, body_update);
-            } catch(error) {
-                console.log(`DOMAgent.mergeHtml() - Error replacing the body of the document (${error}).`);
-            }
-        } else {
-            /* The body of the document update contains updates
-               of specific parts of the document. The children
-               collection of the body element is live updated. Therefore looping over
-               the children collection and removing elements from it at the same time
-               is'nt a good idea. Therefore the children are referenced in a separate
-               list, which is then used to loop over the updates.
-               TODO: Maybe looping as long as the children collection
-                     is not empty is an alternative approach. */
-            const updates = [...document_update.body.children],
-                targetCandidate = sourceNode?.element || null;
-            
-            for (const update of updates) {
-                if (update instanceof HTMLElement) {
-                    console.log(`DOMAgent.mergeHtml() - Going to merge the update '${update.tagName}[${update.id}]'.`)
-                    
-                    const target = this.getTarget(update, targetCandidate);
-                                    
-                    if (target !== null) {
-                        /* There is a target element on which the update
-                        can be applied. */
-                        try {
-                            this.replaceElement(target, update);
-                        } catch(error) {
-                            console.log(`DOMAgent.mergeHtml() - Error merging the update '${update.tagName}[${update.id}]' (${error}).`)
-                        }
-                    } else {
-                        /* No element of the active document can be
-                            identified as a target for the update.
-                            The update is discarded. */
-                        console.info(`DOMAgent.getTarget() - No target found for the update '${update.tagName}[${update.id}]'`);
-                    }
-                }
-            }        
-        }            
-    }
-    
-    mergeJson(this: DOMAgent, json: any, domTarget?: DOMTarget): void {
-        if (json.result) {
-            this.mergeHtml(json.result, domTarget);
-        }
-        
-        if (json.updates instanceof Object) {
-            for (const [id, updateString] of Object.entries(json.updates)) {
-                if (typeof id === "string" && typeof updateString === "string") {
-                    this.mergeHtml(updateString, {element: document.getElementById(id)});
-                }
-            }
-        }
-    }
-    
-    showError(this: DOMAgent, htmlString: string, domTarget?: DOMTarget): void {
-        if (htmlString.startsWith("<!DOCTYPE") || htmlString.startsWith("<!doctype") || htmlString.startsWith("<html")) {
-            DOMAgent.openErrorDialog(htmlString);
-        } else {
-            this.mergeHtml(htmlString, domTarget);
-        }
-    }
-    
-    
-    createError(this: DOMAgent, response: Response): void {
-        const errorDocument = `<html><body>
-<h1>Unsupported response</h1>
-<table>
-<tbody>
-<tr>
-<td>HTTP status code</td><td>${response.status}</td>
-</tr>
-<tr>
-<td>HTTP status text</td><td>${response.statusText}</td>
-</tr>
-<tr>
-<td>Content-Type</td><td>${response.headers.get("Content-Type")}</td>
-</tr>
-</tbody>
-</table>        
-</body></html>`;
-
-        DOMAgent.openErrorDialog(errorDocument);
-    }
-
-}
-
-class FeatureFactory implements FeatureFactoryInterface {
-    
-    domAgent: DOMAgent;
-    
-    constructor() {
-        this.domAgent = new DOMAgent(this);
     }
     
     createFeature(this: FeatureFactory, element: HTMLElement) {
@@ -733,24 +500,24 @@ class FeatureFactory implements FeatureFactoryInterface {
             switch (element.tagName) {
                 case "A":
                 case "SELECT":
-                    new ActionCall(element, this.domAgent);
+                    new ActionCall(element, this);
                     break;
                     
                 case "BUTTON":
                     if ("enliwfenToggle" in element.dataset || "enliwfenToggleClass" in element.dataset) {
                         new ToggleAction(element);
                     } else {
-                        new ActionCall(element, this.domAgent);
+                        new ActionCall(element, this);
                     }
                     break;
                     
                 case "FORM":
-                    new Form(element, this.domAgent);
+                    new Form(element, this);
                     break;
                     
                 case "INPUT":
                     if (element.hasAttribute("list")) {
-                        new Datalist(element, this.domAgent);    
+                        new Datalist(element, this);    
                     } else {
                         this.createFeatureFromDataset(element);
                     }
@@ -770,7 +537,7 @@ class FeatureFactory implements FeatureFactoryInterface {
         const dataset = element.dataset;
         
         if ("enliwfenUrl" in dataset) {
-            new Component(element, this.domAgent);
+            new Component(element, this);
         } else if ("enliwfenToggle" in dataset || "enliwfenToggleClass" in dataset) {
             new ToggleAction(element);
         } else if ("enliwfenCheckboxGroup" in dataset  && element.tagName === "INPUT") {
