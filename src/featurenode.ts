@@ -10,10 +10,10 @@ export class FeatureNode {
     
     _element: HTMLElement;
     _dataset: DOMStringMap;
-    _url?: string;
+    _url?: string | null;
     _method?: string;
     _event?: string | null;
-    _headers?: object;
+    _headers?: object | null;
     _timeout?: number;
     _observers?: string | null;
     _target?: HTMLElement;
@@ -55,26 +55,38 @@ export class FeatureNode {
       - Given any other element, the URL is taken from
         the attribute 'dataenliwfen-url'.
      */
-    get url() {
-        if (this._url === undefined) {
+    get url(): string | null {
+        let url = null;
+
+        if (this._url !== undefined) {
+            url = this._url
+        } else {
             const element = this._element;
-            
+            let url;
+
             switch(element.tagName) {
                 case "A":
-                    return (element as HTMLAnchorElement).href;
+                    url = (element as HTMLAnchorElement).href;
+                    break;
+
                 case "BUTTON":
                 case "INPUT":
-                    return element.dataset.enliwfenUrl || (element as HTMLButtonElement | HTMLInputElement).formAction;
+                    url = element.dataset.enliwfenUrl || (element as HTMLButtonElement | HTMLInputElement).formAction;
+                    break;
                 
                 case "FORM":
-                    return (element as HTMLFormElement).action;
+                    url = (element as HTMLFormElement).action;
+                    break;
                 
                 default:
-                    return element.dataset.enliwfenUrl;
+                    url = element.dataset.enliwfenUrl || null;
+                    break;
             }
+
+            this._url = url;
         }
         
-        return this._url            
+        return url;
     }
     
     /*
@@ -99,19 +111,31 @@ export class FeatureNode {
           - Otherwise the default method 'GET' will be returned.
      */
     get method(): string {
+        let method = "GET";        
         const element = this._element;
         
-        switch(element.tagName) {
-            case "FORM":
-                return this.deferred ? "GET" : (element as HTMLFormElement).method
-            
-            case "BUTTON":
-            case "INPUT":
-                return (element as HTMLButtonElement | HTMLInputElement).formMethod || element.dataset.enliwfenMethod || "GET"
-                
-            default:
-                return element.dataset.enliwfenMethod || "GET"
+        if (this._method !== undefined) {
+            method = this._method;
+        } else {
+            switch(element.tagName) {
+                case "FORM":
+                    method = this.deferred ? "GET" : (element as HTMLFormElement).method;
+                    break;
+
+                case "BUTTON":
+                case "INPUT":
+                    method = (element as HTMLButtonElement | HTMLInputElement).formMethod || element.dataset.enliwfenMethod || "GET";
+                    break;
+                    
+                default:
+                    method = element.dataset.enliwfenMethod || "GET";
+                    break;
+            }
+
+            this._method = method;
         }
+
+        return method;
     }
     
     /*
@@ -128,10 +152,10 @@ export class FeatureNode {
         if (this._headers !== undefined) {
             headers = this._headers;
         } else {
-            headers = this.dataset.enliwfenHeaders;
+            const headersJson = this.dataset.enliwfenHeaders;
             
-            this._headers = headers ? JSON.parse(headers) : null;
-            headers = this._headers;
+            headers = headersJson ? JSON.parse(headersJson) : null;
+            this._headers = headers;
         }
         
         return headers;
@@ -154,14 +178,13 @@ export class FeatureNode {
             if (enliwfenTimeout) {
                 const parsedTimeout = parseInt(enliwfenTimeout);
                 
-                this._timeout = !Number.isNaN(parsedTimeout) ? Math.max(0, parsedTimeout) : 30000;
-                timeout = this._timeout;
-            } else {
-                this._timeout = timeout;
+                timeout = !Number.isNaN(parsedTimeout) ? Math.max(0, parsedTimeout) : 30000;
             }
+            
+            this._timeout = timeout;
         }
         
-        return timeout
+        return timeout;
     }
     
     /*

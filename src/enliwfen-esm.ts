@@ -195,7 +195,13 @@ class ServerInteractionFeature extends Feature {
     constructor(element: HTMLElement, domAgent: DOMAgent) {
         super(element);
 
-        this.endpoint = new Endpoint(this.node.url, domAgent, this.node.element);
+        const url = this.node.url;
+
+        if (url === null) {
+            throw new Error(`ServerInteractionFeature.constructor() [${this.node}] - URL not detected.`)
+        }
+
+        this.endpoint = new Endpoint(url, domAgent, this.node.element);
     }
     
     async callServer(this: ServerInteractionFeature, {eventBefore, eventAfter}: {eventBefore: string, eventAfter: string}) {
